@@ -61,5 +61,6 @@ variable "infra_deploy_roles" {
     "roles/iam.workloadIdentityPoolAdmin",
     "roles/iam.serviceAccountAdmin",
     "roles/run.admin",
+    "roles/resourcemanager.projectIamAdmin",
   ]
 }

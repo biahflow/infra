@@ -49,9 +49,11 @@ resource "google_project_iam_member" "infra_deploy" {
 }
 
 # O bucket de estado é criado fora do Terraform (ovo e galinha: ele guarda o
-# estado deste stack). Aqui só se concede acesso a ele.
+# estado deste stack). Aqui só se concede acesso a ele. storage.admin ESCOPADO
+# ao bucket (não ao projeto): o CI precisa de setIamPolicy para aplicar este
+# próprio recurso, e objectAdmin não concede.
 resource "google_storage_bucket_iam_member" "infra_deploy_state" {
   bucket = var.state_bucket
-  role   = "roles/storage.objectAdmin"
+  role   = "roles/storage.admin"
   member = "serviceAccount:${google_service_account.infra_deploy.email}"
 }
