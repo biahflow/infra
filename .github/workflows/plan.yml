@@ -135,7 +135,12 @@ jobs:
       - run: terraform validate
 
       - name: plan
-        run: terraform plan -input=false -no-color | tee plano.txt
+        # pipefail: sem ele o exit do plan morre no tee e um plan QUEBRADO passa
+        # verde no PR (aconteceu: 403 de permissão mascarado no primeiro plan do
+        # stack rede).
+        run: |
+          set -o pipefail
+          terraform plan -input=false -no-color | tee plano.txt
 
       - name: Publicar plano no resumo do job
         if: always()
