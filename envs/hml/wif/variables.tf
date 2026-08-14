@@ -76,5 +76,7 @@ variable "infra_deploy_roles" {
     "roles/artifactregistry.reader",
     # Zona DNS privada run.app da VPC (ingress interno alcançável pelo proxy).
     "roles/dns.admin",
+    # envs/hml/rede adota o router/NAT e envs/hml/croquito cria a subnet do web.
+    "roles/compute.networkAdmin",
   ]
 }

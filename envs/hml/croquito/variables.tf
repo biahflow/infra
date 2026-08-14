@@ -27,11 +27,8 @@ variable "vpc_network" {
   default     = "hml"
 }
 
-variable "vpc_subnet" {
-  description = "Subnet us-east1 da VPC hml (Private Google Access habilitado)."
-  type        = string
-  default     = "hml-us-east1"
-}
+# A subnet do egress do web é recurso deste stack (google_compute_subnetwork.
+# web_egress), fora da lista do Cloud NAT — ver envs/hml/rede.
 
 variable "image_inicial" {
   description = <<-EOT
