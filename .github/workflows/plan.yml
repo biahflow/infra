@@ -26,8 +26,13 @@ jobs:
         id: filtro
         with:
           filters: |
-            modules:
-              - 'modules/**'
+            # Por módulo, e não modules/** inteiro: mudança num módulo só arrasta
+            # os stacks que o consomem — mudar cloud-run-service não pode disparar
+            # plan de envs/prd/wif, que não o usa.
+            modules_wif:
+              - 'modules/github-wif/**'
+            modules_run:
+              - 'modules/cloud-run-service/**'
             global_dns:
               - 'envs/global/dns/**'
             hml_wif:
@@ -46,7 +51,8 @@ jobs:
       - name: Montar matriz de stacks
         id: matriz
         env:
-          MODULES: ${{ steps.filtro.outputs.modules }}
+          MODULES_WIF: ${{ steps.filtro.outputs.modules_wif }}
+          MODULES_RUN: ${{ steps.filtro.outputs.modules_run }}
           GLOBAL_DNS: ${{ steps.filtro.outputs.global_dns }}
           HML_WIF: ${{ steps.filtro.outputs.hml_wif }}
           HML_SERVICOS: ${{ steps.filtro.outputs.hml_servicos }}
@@ -58,10 +64,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Mudança em modules/** afeta todo stack que consome módulo — mais
-          # barato planejar todos do que rastrear quem usa o quê.
+          # Mudança num módulo afeta os stacks que o consomem; o segundo
+          # argumento diz qual filtro de módulo vale para o stack.
           alterado() {
-            [ "$MODULES" = 'true' ] || [ "$1" = 'true' ]
+            [ "$1" = 'true' ] || [ "${2:-false}" = 'true' ]
           }
 
           incluidos='[]'
@@ -71,15 +77,15 @@ jobs:
           }
 
           if alterado "$GLOBAL_DNS"; then adicionar 'envs/global/dns' 'hml'; fi
-          if alterado "$HML_WIF"; then adicionar 'envs/hml/wif' 'hml'; fi
-          if alterado "$HML_SERVICOS"; then adicionar 'envs/hml/servicos' 'hml'; fi
+          if alterado "$HML_WIF" "$MODULES_WIF"; then adicionar 'envs/hml/wif' 'hml'; fi
+          if alterado "$HML_SERVICOS" "$MODULES_RUN"; then adicionar 'envs/hml/servicos' 'hml'; fi
           if alterado "$HML_ELISEU_DEMO"; then adicionar 'envs/hml/eliseu-demo' 'hml'; fi
-          if alterado "$HML_CROQUITO"; then adicionar 'envs/hml/croquito' 'hml'; fi
+          if alterado "$HML_CROQUITO" "$MODULES_RUN"; then adicionar 'envs/hml/croquito' 'hml'; fi
           if alterado "$HML_CROQUITO_EDGE"; then adicionar 'envs/hml/croquito-edge' 'hml'; fi
 
           # prd só entra depois do primeiro apply local de envs/prd/wif, que é
           # quem cria o provider OIDC referenciado por WIF_PROVIDER_PRD.
-          if [ -n "$WIF_PROVIDER_PRD" ] && alterado "$PRD_WIF"; then
+          if [ -n "$WIF_PROVIDER_PRD" ] && alterado "$PRD_WIF" "$MODULES_WIF"; then
             adicionar 'envs/prd/wif' 'prd'
           fi
 
