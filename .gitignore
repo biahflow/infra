@@ -1,0 +1,16 @@
+# Diretórios de trabalho do Terraform (providers e módulos baixados).
+**/.terraform/
+
+# Estado local e locks de execução — o estado real vive no GCS.
+*.tfstate
+*.tfstate.*
+
+# Valores de entrada podem carregar segredo; passar por env ou -var.
+*.tfvars
+
+crash.log
+
+# O lock de providers É versionado nos stacks (envs/**), que são quem fixa a
+# versão aplicada. Nos módulos reutilizáveis o lock é subproduto do `init`
+# local rodado nos portões e não deve ser versionado.
+modules/**/.terraform.lock.hcl
