@@ -38,3 +38,38 @@ variable "publico" {
   type        = bool
   default     = true
 }
+
+variable "ingress" {
+  description = <<-EOT
+    Política de ingress do serviço. `INGRESS_TRAFFIC_INTERNAL_ONLY` deixa o
+    serviço inalcançável da internet — só tráfego interno do projeto (VPC via
+    Direct VPC egress, Pub/Sub push, Eventarc) chega nele.
+  EOT
+  type        = string
+  default     = "INGRESS_TRAFFIC_ALL"
+
+  validation {
+    condition = contains([
+      "INGRESS_TRAFFIC_ALL",
+      "INGRESS_TRAFFIC_INTERNAL_ONLY",
+      "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER",
+    ], var.ingress)
+    error_message = "ingress deve ser um dos valores INGRESS_TRAFFIC_* do Cloud Run v2."
+  }
+}
+
+variable "vpc_network" {
+  description = <<-EOT
+    Nome da VPC para Direct VPC egress (com `ALL_TRAFFIC`). Null = sem VPC
+    egress. Usado por serviços que precisam alcançar serviços de ingress
+    interno (ex.: um proxy público na frente de backends internos).
+  EOT
+  type        = string
+  default     = null
+}
+
+variable "vpc_subnet" {
+  description = "Subnet do Direct VPC egress (obrigatória quando vpc_network é definido)."
+  type        = string
+  default     = null
+}

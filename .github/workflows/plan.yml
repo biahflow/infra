@@ -36,6 +36,10 @@ jobs:
               - 'envs/hml/servicos/**'
             hml_eliseu_demo:
               - 'envs/hml/eliseu-demo/**'
+            hml_croquito:
+              - 'envs/hml/croquito/**'
+            hml_croquito_edge:
+              - 'envs/hml/croquito-edge/**'
             prd_wif:
               - 'envs/prd/wif/**'
 
@@ -47,6 +51,8 @@ jobs:
           HML_WIF: ${{ steps.filtro.outputs.hml_wif }}
           HML_SERVICOS: ${{ steps.filtro.outputs.hml_servicos }}
           HML_ELISEU_DEMO: ${{ steps.filtro.outputs.hml_eliseu_demo }}
+          HML_CROQUITO: ${{ steps.filtro.outputs.hml_croquito }}
+          HML_CROQUITO_EDGE: ${{ steps.filtro.outputs.hml_croquito_edge }}
           PRD_WIF: ${{ steps.filtro.outputs.prd_wif }}
           WIF_PROVIDER_PRD: ${{ vars.WIF_PROVIDER_PRD }}
         run: |
@@ -68,6 +74,8 @@ jobs:
           if alterado "$HML_WIF"; then adicionar 'envs/hml/wif' 'hml'; fi
           if alterado "$HML_SERVICOS"; then adicionar 'envs/hml/servicos' 'hml'; fi
           if alterado "$HML_ELISEU_DEMO"; then adicionar 'envs/hml/eliseu-demo' 'hml'; fi
+          if alterado "$HML_CROQUITO"; then adicionar 'envs/hml/croquito' 'hml'; fi
+          if alterado "$HML_CROQUITO_EDGE"; then adicionar 'envs/hml/croquito-edge' 'hml'; fi
 
           # prd só entra depois do primeiro apply local de envs/prd/wif, que é
           # quem cria o provider OIDC referenciado por WIF_PROVIDER_PRD.

@@ -7,20 +7,21 @@ Terraform, e revisão controlada pelo CI da aplicação.
 
 | Quem | É dono de |
 | --- | --- |
-| Terraform (este módulo) | existência do serviço, região, ingress, min/max instâncias, `roles/run.invoker` |
-| CI da aplicação | imagem, revisão, labels da revisão, tráfego |
+| Terraform (este módulo) | existência do serviço, região, ingress, VPC egress, min/max instâncias, `roles/run.invoker` |
+| CI da aplicação | imagem, revisão, labels, env, command/args, recursos, volumes, service account, timeout, concorrência, tráfego |
 
-O `lifecycle.ignore_changes` em `main.tf` materializa essa divisão:
-`client`, `client_version`, `template[0].containers[0].image` e
-`template[0].labels`. `var.image_inicial` só vale na criação — trocar o valor
-depois não redeploya nada.
+O `lifecycle.ignore_changes` em `main.tf` materializa essa divisão: `client`,
+`client_version` e, dentro do template, `containers[0].{image,env,command,args,
+resources,volume_mounts,ports}`, `volumes`, `service_account`, `timeout`,
+`max_instance_request_concurrency` e `labels` — tudo que um
+`gcloud run services update` de deploy de aplicação escreve. `var.image_inicial`
+só vale na criação — trocar o valor depois não redeploya nada.
 
 **Manutenção da lista:** se um `terraform plan` logo depois de um deploy do CI
 acusar drift num campo que o módulo não declara, o campo é do CI. Acrescente-o
 ao `ignore_changes` e registre aqui. Campos com chance de aparecer:
-`template[0].revision` (quando o CI nomeia revisões),
-`template[0].annotations`, `template[0].containers[0].env` (se as variáveis
-passarem a ser injetadas no deploy) e `traffic` (se o CI fizer split).
+`template[0].revision` (quando o CI nomeia revisões), `template[0].annotations`
+e `traffic` (se o CI fizer split).
 
 ## Notas
 

@@ -37,6 +37,7 @@ variable "repos_allowlist" {
     "dcamppos83/OikOS",
     "biahflow/eliseu",
     "biahflow/infra",
+    "biahflow/croquito",
   ]
 }
 
@@ -52,6 +53,7 @@ variable "deploy_sa_repos" {
     "biahflow/site",
     "dcamppos83/OikOS",
     "biahflow/eliseu",
+    "biahflow/croquito",
   ]
 }
 
@@ -63,5 +65,10 @@ variable "infra_deploy_roles" {
     "roles/iam.serviceAccountAdmin",
     "roles/run.admin",
     "roles/resourcemanager.projectIamAdmin",
+    # envs/hml/croquito cria buckets, Pub/Sub e cascas de secret com IAM em nível
+    # de recurso — os três admins abaixo existem por causa dele.
+    "roles/storage.admin",
+    "roles/pubsub.admin",
+    "roles/secretmanager.admin",
   ]
 }
