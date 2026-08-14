@@ -7,6 +7,10 @@ resource "google_cloud_run_v2_service" "this" {
   project  = var.project
   location = var.region
 
+  # Homologação troca serviço de nome quando precisa (ex.: re-registro por bug
+  # de roteamento); a proteção do provider bloquearia o destroy do rename.
+  deletion_protection = false
+
   ingress = var.ingress
 
   template {

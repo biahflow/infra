@@ -132,19 +132,19 @@ module "web" {
 module "api" {
   source = "../../../modules/cloud-run-service"
 
-  nome            = "croquito-api-hml"
+  # Renomeado de croquito-api-hml em 2026-08-14: a identidade antiga ficou com
+  # o roteamento quebrado no GFE (404 em todos os caminhos com workload real,
+  # hello roteando — bug de plataforma). Nome novo = registro novo.
+  nome            = "croquito-scene-hml"
   project         = var.project
   region          = var.region
   image_inicial   = var.image_inicial
   service_account = google_service_account.api.email
 
-  # Ingress ALL por contingência (2026-08-14): o caminho interno da API é
-  # recusado pelo GFE com 404 mesmo com casca idêntica à do auth e da medição
-  # (bug de plataforma; hello roteia, workload real não — thread aberto no
-  # fórum do Google). A barreira volta a ser a autenticação da aplicação (JWT
-  # fail-closed). Reverter a INTERNAL_ONLY quando o bug for corrigido.
+  # Interno + invoker aberto: a barreira de rede é o ingress; a autenticação é o
+  # JWT da aplicação. Exigir IAM aqui obrigaria o nginx a cunhar ID tokens.
   publico = true
-  ingress = "INGRESS_TRAFFIC_ALL"
+  ingress = "INGRESS_TRAFFIC_INTERNAL_ONLY"
 
   min_instances = 0
   max_instances = 3
@@ -155,16 +155,15 @@ module "api" {
 module "worker" {
   source = "../../../modules/cloud-run-service"
 
-  nome            = "croquito-worker-hml"
+  # Renomeado de croquito-worker-hml pela mesma razão do croquito-scene-hml.
+  nome            = "croquito-jobs-hml"
   project         = var.project
   region          = var.region
   image_inicial   = var.image_inicial
   service_account = google_service_account.worker.email
 
-  # Mesma contingência da API (bug do caminho interno); o worker continua
-  # PRIVADO por IAM — só a SA do push do Pub/Sub tem run.invoker.
   publico = false
-  ingress = "INGRESS_TRAFFIC_ALL"
+  ingress = "INGRESS_TRAFFIC_INTERNAL_ONLY"
 
   min_instances = 0
   max_instances = 3
