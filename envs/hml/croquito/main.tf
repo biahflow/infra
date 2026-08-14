@@ -383,3 +383,42 @@ resource "google_secret_manager_secret_iam_member" "acesso" {
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${each.value.email}"
 }
+
+# ---------------------------------------------------------------------------
+# DNS privado da VPC para run.app: sem ele, o egress VPC do proxy resolve os
+# hosts *.run.app para os IPs públicos do Google Frontend e o ingress interno
+# dos backends classifica a requisição como EXTERNA (404). A zona faz a VPC
+# resolver run.app para a faixa do private.googleapis.com, cujo caminho é
+# reconhecido como interno. Requisito documentado de "ingress interno a partir
+# de VPC"; vale para a VPC inteira, e mora aqui porque o croquito é quem o
+# exige hoje.
+# ---------------------------------------------------------------------------
+
+resource "google_dns_managed_zone" "run_app_privada" {
+  name        = "run-app-privada"
+  dns_name    = "run.app."
+  description = "Resolve run.app para private.googleapis.com dentro da VPC hml (ingress interno)."
+  visibility  = "private"
+
+  private_visibility_config {
+    networks {
+      network_url = "https://www.googleapis.com/compute/v1/projects/${var.project}/global/networks/${var.vpc_network}"
+    }
+  }
+}
+
+resource "google_dns_record_set" "run_app_apex" {
+  managed_zone = google_dns_managed_zone.run_app_privada.name
+  name         = "run.app."
+  type         = "A"
+  ttl          = 300
+  rrdatas      = ["199.36.153.8", "199.36.153.9", "199.36.153.10", "199.36.153.11"]
+}
+
+resource "google_dns_record_set" "run_app_wildcard" {
+  managed_zone = google_dns_managed_zone.run_app_privada.name
+  name         = "*.run.app."
+  type         = "A"
+  ttl          = 300
+  rrdatas      = ["199.36.153.8", "199.36.153.9", "199.36.153.10", "199.36.153.11"]
+}
