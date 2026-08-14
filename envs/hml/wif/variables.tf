@@ -74,5 +74,7 @@ variable "infra_deploy_roles" {
     # Registry com a credencial de quem aplica; sem reader, o apply de
     # envs/hml/servicos falha em 403 (visto no primeiro apply do croquito).
     "roles/artifactregistry.reader",
+    # Zona DNS privada run.app da VPC (ingress interno alcançável pelo proxy).
+    "roles/dns.admin",
   ]
 }
