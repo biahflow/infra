@@ -11,3 +11,6 @@ provider "cloudflare" {
 data "cloudflare_zone" "this" {
   name = var.cloudflare_zone
 }
+
+# Fumaça do pipeline (2026-08-14): mudança inócua para validar plan no PR e
+# apply no merge com WIF — pode ser removido em qualquer limpeza futura.
