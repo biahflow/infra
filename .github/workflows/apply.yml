@@ -26,6 +26,8 @@ jobs:
       hml_wif: ${{ steps.stacks.outputs.hml_wif }}
       hml_servicos: ${{ steps.stacks.outputs.hml_servicos }}
       hml_eliseu_demo: ${{ steps.stacks.outputs.hml_eliseu_demo }}
+      hml_croquito: ${{ steps.stacks.outputs.hml_croquito }}
+      hml_croquito_edge: ${{ steps.stacks.outputs.hml_croquito_edge }}
       prd_wif: ${{ steps.stacks.outputs.prd_wif }}
     steps:
       - uses: actions/checkout@v4
@@ -44,6 +46,10 @@ jobs:
               - 'envs/hml/servicos/**'
             hml_eliseu_demo:
               - 'envs/hml/eliseu-demo/**'
+            hml_croquito:
+              - 'envs/hml/croquito/**'
+            hml_croquito_edge:
+              - 'envs/hml/croquito-edge/**'
             prd_wif:
               - 'envs/prd/wif/**'
 
@@ -55,6 +61,8 @@ jobs:
           HML_WIF: ${{ steps.filtro.outputs.hml_wif }}
           HML_SERVICOS: ${{ steps.filtro.outputs.hml_servicos }}
           HML_ELISEU_DEMO: ${{ steps.filtro.outputs.hml_eliseu_demo }}
+          HML_CROQUITO: ${{ steps.filtro.outputs.hml_croquito }}
+          HML_CROQUITO_EDGE: ${{ steps.filtro.outputs.hml_croquito_edge }}
           PRD_WIF: ${{ steps.filtro.outputs.prd_wif }}
         run: |
           set -euo pipefail
@@ -72,6 +80,8 @@ jobs:
           avaliar hml_wif "$HML_WIF"
           avaliar hml_servicos "$HML_SERVICOS"
           avaliar hml_eliseu_demo "$HML_ELISEU_DEMO"
+          avaliar hml_croquito "$HML_CROQUITO"
+          avaliar hml_croquito_edge "$HML_CROQUITO_EDGE"
           avaliar prd_wif "$PRD_WIF"
 
   hml_wif:
@@ -166,6 +176,64 @@ jobs:
     defaults:
       run:
         working-directory: envs/hml/eliseu-demo
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Credencial GCP via OIDC (sem chave)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER_HML }}
+          service_account: infra-deploy@biahflow-hml.iam.gserviceaccount.com
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.14.3
+          terraform_wrapper: false
+
+      - run: terraform init -input=false
+
+      - run: terraform apply -input=false -auto-approve
+
+  hml_croquito:
+    name: apply envs/hml/croquito
+    # Depois de hml_wif: os papéis novos da infra-deploy (storage/pubsub/secret
+    # admin) e o allowlist do repositório croquito nascem lá.
+    needs: [detectar, hml_wif]
+    if: ${{ !cancelled() && !failure() && needs.detectar.outputs.hml_croquito == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: envs/hml/croquito
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Credencial GCP via OIDC (sem chave)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER_HML }}
+          service_account: infra-deploy@biahflow-hml.iam.gserviceaccount.com
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.14.3
+          terraform_wrapper: false
+
+      - run: terraform init -input=false
+
+      - run: terraform apply -input=false -auto-approve
+
+  hml_croquito_edge:
+    name: apply envs/hml/croquito-edge
+    # Depois de hml_croquito: a borda aponta para o hostname do croquito-web-hml;
+    # sem o serviço, o proxy nasceria mirando o vazio.
+    needs: [detectar, hml_wif, hml_croquito]
+    if: ${{ !cancelled() && !failure() && needs.detectar.outputs.hml_croquito_edge == 'true' }}
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    defaults:
+      run:
+        working-directory: envs/hml/croquito-edge
     steps:
       - uses: actions/checkout@v4
 

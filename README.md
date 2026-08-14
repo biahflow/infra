@@ -14,6 +14,8 @@ envs/
   hml/wif/             identidade de CI em hml — importa o que já existia
   hml/servicos/        serviço eliseu-hml
   hml/eliseu-demo/     eliseu-demo.biahflow.ai (CNAME + domain mapping)
+  hml/croquito/        croquito em hml: 5 serviços Cloud Run, buckets, Pub/Sub, secrets
+  hml/croquito-edge/   croquito-hml.biahflow.ai (CNAME proxied + Worker de host-override)
   prd/wif/             identidade de CI em prd — tudo novo
   prd/servicos/        scaffold, ainda sem conteúdo
 .github/workflows/
@@ -41,6 +43,8 @@ Credenciais:
 ```bash
 gcloud auth application-default login          # GCP (ou GOOGLE_APPLICATION_CREDENTIALS)
 export CLOUDFLARE_API_TOKEN=...                # Zone Read + DNS Edit em biahflow.ai
+                                               # envs/hml/croquito-edge exige também
+                                               # Account -> Workers Scripts -> Edit
 ```
 
 `CLOUDFLARE_API_TOKEN` só é necessário em `envs/global/dns` e

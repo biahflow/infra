@@ -1,0 +1,11 @@
+// Proxy de borda do croquito-hml: reescreve o hostname da URL para a origem
+// Cloud Run. Numa subrequisição de Worker o `Host` sai da URL, não de um header
+// — é o override de Host que as Origin Rules só dão em plano Enterprise.
+// Cache/WAF da Cloudflare atuam antes deste código; aqui só se troca a origem.
+export default {
+  async fetch(request) {
+    const url = new URL(request.url);
+    url.hostname = "${origem}";
+    return fetch(new Request(url, request));
+  },
+};

@@ -1,13 +1,13 @@
 # Casca de um serviço Cloud Run v2: o Terraform é dono da existência do serviço
-# e da configuração estável (região, ingress, escala, quem pode invocar); o CI da
-# aplicação é dono da revisão e da imagem.
+# e da configuração estável (região, ingress, rede, escala, quem pode invocar); o
+# CI da aplicação é dono da revisão e da imagem.
 
 resource "google_cloud_run_v2_service" "this" {
   name     = var.nome
   project  = var.project
   location = var.region
 
-  ingress = "INGRESS_TRAFFIC_ALL"
+  ingress = var.ingress
 
   template {
     scaling {
@@ -18,18 +18,46 @@ resource "google_cloud_run_v2_service" "this" {
     containers {
       image = var.image_inicial
     }
+
+    # Direct VPC egress: com ALL_TRAFFIC, chamadas a serviços internos do mesmo
+    # projeto entram como tráfego interno — é o que permite um serviço público
+    # fazer proxy para serviços com ingress interno. Exige Private Google Access
+    # na subnet (habilitado em hml-us-east1).
+    dynamic "vpc_access" {
+      for_each = var.vpc_network == null ? [] : [var.vpc_network]
+
+      content {
+        egress = "ALL_TRAFFIC"
+
+        network_interfaces {
+          network    = var.vpc_network
+          subnetwork = var.vpc_subnet
+        }
+      }
+    }
   }
 
   # Fronteira de propriedade com o CI da aplicação. `client`/`client_version` são
-  # carimbados por quem fez o último deploy (gcloud, Actions); imagem e labels da
-  # revisão mudam a cada deploy. Se um plan depois de um deploy acusar drift em
-  # outro campo, é sinal de que o campo também é do CI: acrescente-o aqui e
-  # registre no README do módulo.
+  # carimbados por quem fez o último deploy (gcloud, Actions); imagem, labels,
+  # env, command/args, recursos, volumes, service account, timeout e concorrência
+  # da revisão mudam a cada deploy da aplicação. Se um plan depois de um deploy
+  # acusar drift em outro campo, é sinal de que o campo também é do CI:
+  # acrescente-o aqui e registre no README do módulo.
   lifecycle {
     ignore_changes = [
       client,
       client_version,
       template[0].containers[0].image,
+      template[0].containers[0].env,
+      template[0].containers[0].command,
+      template[0].containers[0].args,
+      template[0].containers[0].resources,
+      template[0].containers[0].volume_mounts,
+      template[0].containers[0].ports,
+      template[0].volumes,
+      template[0].service_account,
+      template[0].timeout,
+      template[0].max_instance_request_concurrency,
       template[0].labels,
     ]
   }
