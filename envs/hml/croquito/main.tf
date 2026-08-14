@@ -32,6 +32,11 @@ locals {
 # ignore_changes do módulo); aqui elas existem e recebem IAM de recurso.
 # ---------------------------------------------------------------------------
 
+resource "google_service_account" "web" {
+  account_id   = "croquito-web-hml"
+  display_name = "Runtime do nginx do croquito em hml (sem permissão nenhuma)"
+}
+
 resource "google_service_account" "api" {
   account_id   = "croquito-api-hml"
   display_name = "Runtime da API do croquito em hml"
@@ -64,6 +69,27 @@ resource "google_service_account" "push" {
   display_name = "OIDC do push Pub/Sub -> worker (croquito hml)"
 }
 
+# Os serviços nascem com as runtime SAs acima; quem os cria (infra-deploy, e a
+# hml-deploy nos deploys seguintes já tem serviceAccountUser de projeto) precisa
+# de actAs nelas. Binding por SA, nunca na default de compute.
+locals {
+  runtime_sas = {
+    web     = google_service_account.web
+    api     = google_service_account.api
+    worker  = google_service_account.worker
+    medicao = google_service_account.medicao
+    auth    = google_service_account.auth
+  }
+}
+
+resource "google_service_account_iam_member" "infra_deploy_actas" {
+  for_each = local.runtime_sas
+
+  service_account_id = each.value.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:infra-deploy@${var.project}.iam.gserviceaccount.com"
+}
+
 # ---------------------------------------------------------------------------
 # Serviços Cloud Run.
 # ---------------------------------------------------------------------------
@@ -71,10 +97,11 @@ resource "google_service_account" "push" {
 module "web" {
   source = "../../../modules/cloud-run-service"
 
-  nome          = "croquito-web-hml"
-  project       = var.project
-  region        = var.region
-  image_inicial = var.image_inicial
+  nome            = "croquito-web-hml"
+  project         = var.project
+  region          = var.region
+  image_inicial   = var.image_inicial
+  service_account = google_service_account.web.email
 
   publico     = true
   vpc_network = var.vpc_network
@@ -82,15 +109,18 @@ module "web" {
 
   min_instances = 0
   max_instances = 3
+
+  depends_on = [google_service_account_iam_member.infra_deploy_actas]
 }
 
 module "api" {
   source = "../../../modules/cloud-run-service"
 
-  nome          = "croquito-api-hml"
-  project       = var.project
-  region        = var.region
-  image_inicial = var.image_inicial
+  nome            = "croquito-api-hml"
+  project         = var.project
+  region          = var.region
+  image_inicial   = var.image_inicial
+  service_account = google_service_account.api.email
 
   # Interno + invoker aberto: a barreira de rede é o ingress; a autenticação é o
   # JWT da aplicação. Exigir IAM aqui obrigaria o nginx a cunhar ID tokens.
@@ -99,30 +129,36 @@ module "api" {
 
   min_instances = 0
   max_instances = 3
+
+  depends_on = [google_service_account_iam_member.infra_deploy_actas]
 }
 
 module "worker" {
   source = "../../../modules/cloud-run-service"
 
-  nome          = "croquito-worker-hml"
-  project       = var.project
-  region        = var.region
-  image_inicial = var.image_inicial
+  nome            = "croquito-worker-hml"
+  project         = var.project
+  region          = var.region
+  image_inicial   = var.image_inicial
+  service_account = google_service_account.worker.email
 
   publico = false
   ingress = "INGRESS_TRAFFIC_INTERNAL_ONLY"
 
   min_instances = 0
   max_instances = 3
+
+  depends_on = [google_service_account_iam_member.infra_deploy_actas]
 }
 
 module "medicao" {
   source = "../../../modules/cloud-run-service"
 
-  nome          = "croquito-medicao-hml"
-  project       = var.project
-  region        = var.region
-  image_inicial = var.image_inicial
+  nome            = "croquito-medicao-hml"
+  project         = var.project
+  region          = var.region
+  image_inicial   = var.image_inicial
+  service_account = google_service_account.medicao.email
 
   publico = true
   ingress = "INGRESS_TRAFFIC_INTERNAL_ONLY"
@@ -130,15 +166,18 @@ module "medicao" {
   # Locks de rodada em memória do servidor de medição: uma instância só.
   min_instances = 0
   max_instances = 1
+
+  depends_on = [google_service_account_iam_member.infra_deploy_actas]
 }
 
 module "auth" {
   source = "../../../modules/cloud-run-service"
 
-  nome          = "croquito-auth-hml"
-  project       = var.project
-  region        = var.region
-  image_inicial = var.image_inicial
+  nome            = "croquito-auth-hml"
+  project         = var.project
+  region          = var.region
+  image_inicial   = var.image_inicial
+  service_account = google_service_account.auth.email
 
   publico = true
   ingress = "INGRESS_TRAFFIC_INTERNAL_ONLY"
@@ -147,6 +186,8 @@ module "auth" {
   # (cold start de ~20-40s derrubaria o primeiro login e o JWKS da API).
   min_instances = 1
   max_instances = 1
+
+  depends_on = [google_service_account_iam_member.infra_deploy_actas]
 }
 
 # A push subscription invoca o worker com o OIDC token da SA dedicada.

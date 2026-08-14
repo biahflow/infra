@@ -70,5 +70,9 @@ variable "infra_deploy_roles" {
     "roles/storage.admin",
     "roles/pubsub.admin",
     "roles/secretmanager.admin",
+    # Atualizar um serviço Cloud Run re-valida a leitura da imagem no Artifact
+    # Registry com a credencial de quem aplica; sem reader, o apply de
+    # envs/hml/servicos falha em 403 (visto no primeiro apply do croquito).
+    "roles/artifactregistry.reader",
   ]
 }

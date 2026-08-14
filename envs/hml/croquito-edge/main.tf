@@ -13,6 +13,9 @@
 #
 # O token CLOUDFLARE_API_TOKEN deste stack precisa, além de Zone->Read e
 # Zone->DNS->Edit, de Account->Workers Scripts->Edit (o script e a rota).
+#
+# Primeiro apply ficou skipped no merge inicial (o stack croquito falhou antes);
+# esta nota também serve para o paths-filter arrastar o stack no reapply.
 
 provider "cloudflare" {
   # Token via variável de ambiente CLOUDFLARE_API_TOKEN (não versionado).

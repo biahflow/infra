@@ -10,6 +10,11 @@ resource "google_cloud_run_v2_service" "this" {
   ingress = var.ingress
 
   template {
+    # Runtime SA declarada na criação: sem ela o Cloud Run cai na SA default de
+    # compute, que a infra-deploy (corretamente) não pode impersonar. Depois da
+    # criação o campo é do CI (ignore_changes abaixo).
+    service_account = var.service_account
+
     scaling {
       min_instance_count = var.min_instances
       max_instance_count = var.max_instances

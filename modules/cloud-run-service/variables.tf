@@ -73,3 +73,13 @@ variable "vpc_subnet" {
   type        = string
   default     = null
 }
+
+variable "service_account" {
+  description = <<-EOT
+    E-mail da runtime service account com que o serviço NASCE. Null usa a SA
+    default de compute — evite: exige actAs nela para quem aplica. Depois da
+    criação o campo é do CI da aplicação (ignore_changes).
+  EOT
+  type        = string
+  default     = null
+}
