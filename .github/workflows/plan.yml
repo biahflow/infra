@@ -1,0 +1,130 @@
+name: plan
+
+# Revisão de mudança de infraestrutura: todo PR mostra o plano dos stacks que
+# ele mexe, no resumo do job. Nada é aplicado aqui.
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  detectar:
+    name: Detectar stacks alterados
+    runs-on: ubuntu-latest
+    outputs:
+      matriz: ${{ steps.matriz.outputs.matriz }}
+      algum: ${{ steps.matriz.outputs.algum }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filtro
+        with:
+          filters: |
+            modules:
+              - 'modules/**'
+            global_dns:
+              - 'envs/global/dns/**'
+            hml_wif:
+              - 'envs/hml/wif/**'
+            hml_servicos:
+              - 'envs/hml/servicos/**'
+            hml_eliseu_demo:
+              - 'envs/hml/eliseu-demo/**'
+            prd_wif:
+              - 'envs/prd/wif/**'
+
+      - name: Montar matriz de stacks
+        id: matriz
+        env:
+          MODULES: ${{ steps.filtro.outputs.modules }}
+          GLOBAL_DNS: ${{ steps.filtro.outputs.global_dns }}
+          HML_WIF: ${{ steps.filtro.outputs.hml_wif }}
+          HML_SERVICOS: ${{ steps.filtro.outputs.hml_servicos }}
+          HML_ELISEU_DEMO: ${{ steps.filtro.outputs.hml_eliseu_demo }}
+          PRD_WIF: ${{ steps.filtro.outputs.prd_wif }}
+          WIF_PROVIDER_PRD: ${{ vars.WIF_PROVIDER_PRD }}
+        run: |
+          set -euo pipefail
+
+          # Mudança em modules/** afeta todo stack que consome módulo — mais
+          # barato planejar todos do que rastrear quem usa o quê.
+          alterado() {
+            [ "$MODULES" = 'true' ] || [ "$1" = 'true' ]
+          }
+
+          incluidos='[]'
+          adicionar() {
+            incluidos=$(jq -c --arg stack "$1" --arg ambiente "$2" \
+              '. + [{stack: $stack, ambiente: $ambiente}]' <<< "$incluidos")
+          }
+
+          if alterado "$GLOBAL_DNS"; then adicionar 'envs/global/dns' 'hml'; fi
+          if alterado "$HML_WIF"; then adicionar 'envs/hml/wif' 'hml'; fi
+          if alterado "$HML_SERVICOS"; then adicionar 'envs/hml/servicos' 'hml'; fi
+          if alterado "$HML_ELISEU_DEMO"; then adicionar 'envs/hml/eliseu-demo' 'hml'; fi
+
+          # prd só entra depois do primeiro apply local de envs/prd/wif, que é
+          # quem cria o provider OIDC referenciado por WIF_PROVIDER_PRD.
+          if [ -n "$WIF_PROVIDER_PRD" ] && alterado "$PRD_WIF"; then
+            adicionar 'envs/prd/wif' 'prd'
+          fi
+
+          echo "matriz={\"include\":${incluidos}}" >> "$GITHUB_OUTPUT"
+          if [ "$incluidos" = '[]' ]; then
+            echo 'algum=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'algum=true' >> "$GITHUB_OUTPUT"
+          fi
+
+  plan:
+    name: plan ${{ matrix.stack }}
+    needs: detectar
+    if: needs.detectar.outputs.algum == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.detectar.outputs.matriz) }}
+    env:
+      # Inócuo nos stacks que não falam com a Cloudflare.
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    defaults:
+      run:
+        working-directory: ${{ matrix.stack }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Credencial GCP via OIDC (sem chave)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ matrix.ambiente == 'prd' && vars.WIF_PROVIDER_PRD || vars.WIF_PROVIDER_HML }}
+          service_account: ${{ matrix.ambiente == 'prd' && 'infra-deploy@biahflow-prd.iam.gserviceaccount.com' || 'infra-deploy@biahflow-hml.iam.gserviceaccount.com' }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.14.3
+          terraform_wrapper: false
+
+      - run: terraform fmt -check
+
+      - run: terraform init -input=false
+
+      - run: terraform validate
+
+      - name: plan
+        run: terraform plan -input=false -no-color | tee plano.txt
+
+      - name: Publicar plano no resumo do job
+        if: always()
+        run: |
+          {
+            echo "### \`${{ matrix.stack }}\`"
+            echo ''
+            echo '```terraform'
+            # Teto para não estourar o limite do resumo em plano grande.
+            head -c 60000 plano.txt || echo '(sem plano: uma etapa anterior falhou)'
+            echo ''
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

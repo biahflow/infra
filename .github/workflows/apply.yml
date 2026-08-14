@@ -1,0 +1,214 @@
+name: apply
+
+# Merge na main aplica os stacks alterados. A ordem é fixa e encadeada por
+# `needs` porque há dependência real entre eles: a identidade de CI existe antes
+# de tudo, o serviço existe antes do hostname que aponta para ele.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+
+# Dois applies simultâneos disputariam o lock do state; a fila espera, não
+# cancela — apply cancelado no meio deixa estado e mundo real divergentes.
+concurrency:
+  group: infra-apply
+  cancel-in-progress: false
+
+jobs:
+  detectar:
+    name: Detectar stacks alterados
+    runs-on: ubuntu-latest
+    outputs:
+      global_dns: ${{ steps.stacks.outputs.global_dns }}
+      hml_wif: ${{ steps.stacks.outputs.hml_wif }}
+      hml_servicos: ${{ steps.stacks.outputs.hml_servicos }}
+      hml_eliseu_demo: ${{ steps.stacks.outputs.hml_eliseu_demo }}
+      prd_wif: ${{ steps.stacks.outputs.prd_wif }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filtro
+        with:
+          filters: |
+            modules:
+              - 'modules/**'
+            global_dns:
+              - 'envs/global/dns/**'
+            hml_wif:
+              - 'envs/hml/wif/**'
+            hml_servicos:
+              - 'envs/hml/servicos/**'
+            hml_eliseu_demo:
+              - 'envs/hml/eliseu-demo/**'
+            prd_wif:
+              - 'envs/prd/wif/**'
+
+      - name: Resolver stacks a aplicar
+        id: stacks
+        env:
+          MODULES: ${{ steps.filtro.outputs.modules }}
+          GLOBAL_DNS: ${{ steps.filtro.outputs.global_dns }}
+          HML_WIF: ${{ steps.filtro.outputs.hml_wif }}
+          HML_SERVICOS: ${{ steps.filtro.outputs.hml_servicos }}
+          HML_ELISEU_DEMO: ${{ steps.filtro.outputs.hml_eliseu_demo }}
+          PRD_WIF: ${{ steps.filtro.outputs.prd_wif }}
+        run: |
+          set -euo pipefail
+
+          # Mudança em modules/** afeta todo stack que consome módulo.
+          avaliar() {
+            if [ "$MODULES" = 'true' ] || [ "$2" = 'true' ]; then
+              echo "$1=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "$1=false" >> "$GITHUB_OUTPUT"
+            fi
+          }
+
+          avaliar global_dns "$GLOBAL_DNS"
+          avaliar hml_wif "$HML_WIF"
+          avaliar hml_servicos "$HML_SERVICOS"
+          avaliar hml_eliseu_demo "$HML_ELISEU_DEMO"
+          avaliar prd_wif "$PRD_WIF"
+
+  hml_wif:
+    name: apply envs/hml/wif
+    needs: detectar
+    if: ${{ !cancelled() && !failure() && needs.detectar.outputs.hml_wif == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: envs/hml/wif
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Credencial GCP via OIDC (sem chave)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER_HML }}
+          service_account: infra-deploy@biahflow-hml.iam.gserviceaccount.com
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.14.3
+          terraform_wrapper: false
+
+      - run: terraform init -input=false
+
+      - run: terraform apply -input=false -auto-approve
+
+  global_dns:
+    name: apply envs/global/dns
+    needs: [detectar, hml_wif]
+    if: ${{ !cancelled() && !failure() && needs.detectar.outputs.global_dns == 'true' }}
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    defaults:
+      run:
+        working-directory: envs/global/dns
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Credencial GCP via OIDC (sem chave)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER_HML }}
+          service_account: infra-deploy@biahflow-hml.iam.gserviceaccount.com
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.14.3
+          terraform_wrapper: false
+
+      - run: terraform init -input=false
+
+      - run: terraform apply -input=false -auto-approve
+
+  hml_servicos:
+    name: apply envs/hml/servicos
+    needs: [detectar, hml_wif, global_dns]
+    if: ${{ !cancelled() && !failure() && needs.detectar.outputs.hml_servicos == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: envs/hml/servicos
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Credencial GCP via OIDC (sem chave)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER_HML }}
+          service_account: infra-deploy@biahflow-hml.iam.gserviceaccount.com
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.14.3
+          terraform_wrapper: false
+
+      - run: terraform init -input=false
+
+      - run: terraform apply -input=false -auto-approve
+
+  hml_eliseu_demo:
+    name: apply envs/hml/eliseu-demo
+    # Depois de hml_servicos: o domain mapping só encontra o eliseu-hml se o
+    # serviço já existir.
+    needs: [detectar, hml_wif, global_dns, hml_servicos]
+    if: ${{ !cancelled() && !failure() && needs.detectar.outputs.hml_eliseu_demo == 'true' }}
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    defaults:
+      run:
+        working-directory: envs/hml/eliseu-demo
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Credencial GCP via OIDC (sem chave)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER_HML }}
+          service_account: infra-deploy@biahflow-hml.iam.gserviceaccount.com
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.14.3
+          terraform_wrapper: false
+
+      - run: terraform init -input=false
+
+      - run: terraform apply -input=false -auto-approve
+
+  prd_wif:
+    name: apply envs/prd/wif
+    # Independente da corrente de hml: outro projeto, outro state, outro bucket.
+    # A condição de vars trava o job até o primeiro apply local de prd/wif, que
+    # é quem cria o provider OIDC referenciado aqui.
+    needs: detectar
+    if: ${{ !cancelled() && !failure() && needs.detectar.outputs.prd_wif == 'true' && vars.WIF_PROVIDER_PRD != '' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: envs/prd/wif
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Credencial GCP via OIDC (sem chave)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER_PRD }}
+          service_account: infra-deploy@biahflow-prd.iam.gserviceaccount.com
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.14.3
+          terraform_wrapper: false
+
+      - run: terraform init -input=false
+
+      - run: terraform apply -input=false -auto-approve
