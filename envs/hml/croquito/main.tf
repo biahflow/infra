@@ -138,10 +138,13 @@ module "api" {
   image_inicial   = var.image_inicial
   service_account = google_service_account.api.email
 
-  # Interno + invoker aberto: a barreira de rede é o ingress; a autenticação é o
-  # JWT da aplicação. Exigir IAM aqui obrigaria o nginx a cunhar ID tokens.
+  # Ingress ALL por contingência (2026-08-14): o caminho interno da API é
+  # recusado pelo GFE com 404 mesmo com casca idêntica à do auth e da medição
+  # (bug de plataforma; hello roteia, workload real não — thread aberto no
+  # fórum do Google). A barreira volta a ser a autenticação da aplicação (JWT
+  # fail-closed). Reverter a INTERNAL_ONLY quando o bug for corrigido.
   publico = true
-  ingress = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+  ingress = "INGRESS_TRAFFIC_ALL"
 
   min_instances = 0
   max_instances = 3
@@ -158,8 +161,10 @@ module "worker" {
   image_inicial   = var.image_inicial
   service_account = google_service_account.worker.email
 
+  # Mesma contingência da API (bug do caminho interno); o worker continua
+  # PRIVADO por IAM — só a SA do push do Pub/Sub tem run.invoker.
   publico = false
-  ingress = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+  ingress = "INGRESS_TRAFFIC_ALL"
 
   min_instances = 0
   max_instances = 3
