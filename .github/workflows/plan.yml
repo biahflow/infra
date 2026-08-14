@@ -8,6 +8,9 @@ on:
 permissions:
   contents: read
   id-token: write
+  # paths-filter lê a lista de arquivos do PR via API — sem isto o job de
+  # detecção morre com "Resource not accessible by integration".
+  pull-requests: read
 
 jobs:
   detectar:
