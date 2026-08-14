@@ -79,6 +79,9 @@ locals {
     worker  = google_service_account.worker
     medicao = google_service_account.medicao
     auth    = google_service_account.auth
+    # Criar a push subscription com oidc_token também exige actAs na SA de push
+    # por quem aplica — o Pub/Sub valida na criação, não só na entrega.
+    push = google_service_account.push
   }
 }
 
@@ -285,6 +288,9 @@ resource "google_pubsub_subscription" "processing_push" {
   expiration_policy {
     ttl = "" # nunca expira por inatividade
   }
+
+  # O Pub/Sub valida o actAs da SA de push na CRIAÇÃO da subscription.
+  depends_on = [google_service_account_iam_member.infra_deploy_actas]
 }
 
 # Sub de leitura da DLQ (inspeção manual; sem consumidor automático em hml).
