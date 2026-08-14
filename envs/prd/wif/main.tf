@@ -17,6 +17,10 @@ module "wif" {
   repos_allowlist = var.repos_allowlist
   deploy_sa_id    = "prd-deploy"
   deploy_sa_repos = var.deploy_sa_repos
+
+  pool_display_name      = "GitHub Actions"
+  provider_display_name  = "GitHub OIDC"
+  deploy_sa_display_name = "Deploy de PRD pelo GitHub Actions"
 }
 
 resource "google_service_account" "infra_deploy" {

@@ -35,6 +35,24 @@ variable "deploy_sa_id" {
   type        = string
 }
 
+variable "pool_display_name" {
+  description = "Nome de exibição do pool. Em recursos importados, declarar o valor vivo para não esvaziá-lo."
+  type        = string
+  default     = null
+}
+
+variable "provider_display_name" {
+  description = "Nome de exibição do provider OIDC. Em recursos importados, declarar o valor vivo para não esvaziá-lo."
+  type        = string
+  default     = null
+}
+
+variable "deploy_sa_display_name" {
+  description = "Nome de exibição da SA de deploy. Em recursos importados, declarar o valor vivo para não esvaziá-lo."
+  type        = string
+  default     = null
+}
+
 variable "deploy_sa_repos" {
   description = <<-EOT
     Repositórios (owner/repo) que podem impersonar a service account de deploy.

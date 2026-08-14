@@ -25,14 +25,15 @@ variable "infra_repo" {
 variable "repos_allowlist" {
   description = <<-EOT
     Repositórios autorizados no pool de hml. Os cinco primeiros são o estado já
-    aplicado; `biahflow/infra` é o acréscimo desta infraestrutura — o primeiro
-    plan pós-import mostra exatamente essa mudança.
+    aplicado (`biahflow/site` migrou de dcamppos83 em 2026-08-14); `biahflow/infra`
+    é o acréscimo desta infraestrutura — o primeiro plan pós-import mostra
+    exatamente essa mudança.
   EOT
   type        = list(string)
   default = [
     "dcamppos83/biahflow-portal-cliente",
     "dcamppos83/biahflow-portal",
-    "dcamppos83/biahflow-site",
+    "biahflow/site",
     "dcamppos83/OikOS",
     "biahflow/eliseu",
     "biahflow/infra",
@@ -48,7 +49,7 @@ variable "deploy_sa_repos" {
   default = [
     "dcamppos83/biahflow-portal-cliente",
     "dcamppos83/biahflow-portal",
-    "dcamppos83/biahflow-site",
+    "biahflow/site",
     "dcamppos83/OikOS",
     "biahflow/eliseu",
   ]

@@ -9,12 +9,14 @@ data "google_project" "this" {
 resource "google_iam_workload_identity_pool" "this" {
   project                   = var.project
   workload_identity_pool_id = var.pool_id
+  display_name              = var.pool_display_name
 }
 
 resource "google_iam_workload_identity_pool_provider" "this" {
   project                            = var.project
   workload_identity_pool_id          = google_iam_workload_identity_pool.this.workload_identity_pool_id
   workload_identity_pool_provider_id = var.provider_id
+  display_name                       = var.provider_display_name
 
   attribute_mapping = {
     "google.subject"       = "assertion.sub"
@@ -31,8 +33,9 @@ resource "google_iam_workload_identity_pool_provider" "this" {
 }
 
 resource "google_service_account" "deploy" {
-  project    = var.project
-  account_id = var.deploy_sa_id
+  project      = var.project
+  account_id   = var.deploy_sa_id
+  display_name = var.deploy_sa_display_name
 }
 
 # Binding autoritativo: a lista de repositórios aqui é a verdade sobre quem pode
