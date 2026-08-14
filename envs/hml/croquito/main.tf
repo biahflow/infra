@@ -97,6 +97,19 @@ resource "google_service_account_iam_member" "infra_deploy_actas" {
 # Serviços Cloud Run.
 # ---------------------------------------------------------------------------
 
+# Subnet PRÓPRIA do egress do web, fora da lista do Cloud NAT (envs/hml/rede).
+# Medido em 2026-08-14: na hml-us-east1, o NAT SNATeava o egress e o ingress
+# interno dos backends recusava o proxy como tráfego externo. Sem NAT, o
+# caminho ao Google é o Private Google Access — classificado como interno.
+resource "google_compute_subnetwork" "web_egress" {
+  name          = "hml-us-east1-croquito-web"
+  network       = var.vpc_network
+  region        = var.region
+  ip_cidr_range = "10.20.1.0/24"
+
+  private_ip_google_access = true
+}
+
 module "web" {
   source = "../../../modules/cloud-run-service"
 
@@ -108,7 +121,7 @@ module "web" {
 
   publico     = true
   vpc_network = var.vpc_network
-  vpc_subnet  = var.vpc_subnet
+  vpc_subnet  = google_compute_subnetwork.web_egress.name
 
   min_instances = 0
   max_instances = 3

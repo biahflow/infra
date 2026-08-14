@@ -41,6 +41,8 @@ jobs:
               - 'envs/hml/servicos/**'
             hml_eliseu_demo:
               - 'envs/hml/eliseu-demo/**'
+            hml_rede:
+              - 'envs/hml/rede/**'
             hml_croquito:
               - 'envs/hml/croquito/**'
             hml_croquito_edge:
@@ -57,6 +59,7 @@ jobs:
           HML_WIF: ${{ steps.filtro.outputs.hml_wif }}
           HML_SERVICOS: ${{ steps.filtro.outputs.hml_servicos }}
           HML_ELISEU_DEMO: ${{ steps.filtro.outputs.hml_eliseu_demo }}
+          HML_REDE: ${{ steps.filtro.outputs.hml_rede }}
           HML_CROQUITO: ${{ steps.filtro.outputs.hml_croquito }}
           HML_CROQUITO_EDGE: ${{ steps.filtro.outputs.hml_croquito_edge }}
           PRD_WIF: ${{ steps.filtro.outputs.prd_wif }}
@@ -80,6 +83,7 @@ jobs:
           if alterado "$HML_WIF" "$MODULES_WIF"; then adicionar 'envs/hml/wif' 'hml'; fi
           if alterado "$HML_SERVICOS" "$MODULES_RUN"; then adicionar 'envs/hml/servicos' 'hml'; fi
           if alterado "$HML_ELISEU_DEMO"; then adicionar 'envs/hml/eliseu-demo' 'hml'; fi
+          if alterado "$HML_REDE"; then adicionar 'envs/hml/rede' 'hml'; fi
           if alterado "$HML_CROQUITO" "$MODULES_RUN"; then adicionar 'envs/hml/croquito' 'hml'; fi
           if alterado "$HML_CROQUITO_EDGE"; then adicionar 'envs/hml/croquito-edge' 'hml'; fi
 
@@ -131,7 +135,12 @@ jobs:
       - run: terraform validate
 
       - name: plan
-        run: terraform plan -input=false -no-color | tee plano.txt
+        # pipefail: sem ele o exit do plan morre no tee e um plan QUEBRADO passa
+        # verde no PR (aconteceu: 403 de permissão mascarado no primeiro plan do
+        # stack rede).
+        run: |
+          set -o pipefail
+          terraform plan -input=false -no-color | tee plano.txt
 
       - name: Publicar plano no resumo do job
         if: always()

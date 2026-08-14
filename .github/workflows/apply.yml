@@ -26,6 +26,7 @@ jobs:
       hml_wif: ${{ steps.stacks.outputs.hml_wif }}
       hml_servicos: ${{ steps.stacks.outputs.hml_servicos }}
       hml_eliseu_demo: ${{ steps.stacks.outputs.hml_eliseu_demo }}
+      hml_rede: ${{ steps.stacks.outputs.hml_rede }}
       hml_croquito: ${{ steps.stacks.outputs.hml_croquito }}
       hml_croquito_edge: ${{ steps.stacks.outputs.hml_croquito_edge }}
       prd_wif: ${{ steps.stacks.outputs.prd_wif }}
@@ -50,6 +51,8 @@ jobs:
               - 'envs/hml/servicos/**'
             hml_eliseu_demo:
               - 'envs/hml/eliseu-demo/**'
+            hml_rede:
+              - 'envs/hml/rede/**'
             hml_croquito:
               - 'envs/hml/croquito/**'
             hml_croquito_edge:
@@ -66,6 +69,7 @@ jobs:
           HML_WIF: ${{ steps.filtro.outputs.hml_wif }}
           HML_SERVICOS: ${{ steps.filtro.outputs.hml_servicos }}
           HML_ELISEU_DEMO: ${{ steps.filtro.outputs.hml_eliseu_demo }}
+          HML_REDE: ${{ steps.filtro.outputs.hml_rede }}
           HML_CROQUITO: ${{ steps.filtro.outputs.hml_croquito }}
           HML_CROQUITO_EDGE: ${{ steps.filtro.outputs.hml_croquito_edge }}
           PRD_WIF: ${{ steps.filtro.outputs.prd_wif }}
@@ -86,6 +90,7 @@ jobs:
           avaliar hml_wif "$HML_WIF" "$MODULES_WIF"
           avaliar hml_servicos "$HML_SERVICOS" "$MODULES_RUN"
           avaliar hml_eliseu_demo "$HML_ELISEU_DEMO"
+          avaliar hml_rede "$HML_REDE"
           avaliar hml_croquito "$HML_CROQUITO" "$MODULES_RUN"
           avaliar hml_croquito_edge "$HML_CROQUITO_EDGE"
           avaliar prd_wif "$PRD_WIF" "$MODULES_WIF"
@@ -200,11 +205,38 @@ jobs:
 
       - run: terraform apply -input=false -auto-approve
 
+  hml_rede:
+    name: apply envs/hml/rede
+    # Depois de hml_wif: o compute.networkAdmin da infra-deploy nasce lá.
+    needs: [detectar, hml_wif]
+    if: ${{ !cancelled() && !failure() && needs.detectar.outputs.hml_rede == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: envs/hml/rede
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Credencial GCP via OIDC (sem chave)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER_HML }}
+          service_account: infra-deploy@biahflow-hml.iam.gserviceaccount.com
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.14.3
+          terraform_wrapper: false
+
+      - run: terraform init -input=false
+
+      - run: terraform apply -input=false -auto-approve
+
   hml_croquito:
     name: apply envs/hml/croquito
-    # Depois de hml_wif: os papéis novos da infra-deploy (storage/pubsub/secret
-    # admin) e o allowlist do repositório croquito nascem lá.
-    needs: [detectar, hml_wif]
+    # Depois de hml_wif (papéis/allowlist) e de hml_rede: a subnet nova do web
+    # só cumpre o papel dela com o NAT já restrito à lista.
+    needs: [detectar, hml_wif, hml_rede]
     if: ${{ !cancelled() && !failure() && needs.detectar.outputs.hml_croquito == 'true' }}
     runs-on: ubuntu-latest
     defaults:
