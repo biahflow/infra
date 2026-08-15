@@ -132,7 +132,10 @@ module "web" {
 module "api" {
   source = "../../../modules/cloud-run-service"
 
-  nome            = "croquito-api-hml"
+  # Renomeado de croquito-api-hml em 2026-08-14: a identidade antiga ficou com
+  # o roteamento quebrado no GFE (404 em todos os caminhos com workload real,
+  # hello roteando — bug de plataforma). Nome novo = registro novo.
+  nome            = "croquito-scene-hml"
   project         = var.project
   region          = var.region
   image_inicial   = var.image_inicial
@@ -152,7 +155,8 @@ module "api" {
 module "worker" {
   source = "../../../modules/cloud-run-service"
 
-  nome            = "croquito-worker-hml"
+  # Renomeado de croquito-worker-hml pela mesma razão do croquito-scene-hml.
+  nome            = "croquito-jobs-hml"
   project         = var.project
   region          = var.region
   image_inicial   = var.image_inicial
