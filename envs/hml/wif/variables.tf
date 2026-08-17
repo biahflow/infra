@@ -27,12 +27,14 @@ variable "repos_allowlist" {
     Repositórios autorizados no pool de hml. O caminho aqui é a claim
     `assertion.repository` do token do GitHub: quando um repo muda de dono, ele
     para de autenticar até esta lista mudar junto — foi o caso de `biahflow/site`
-    (migrou de dcamppos83 em 2026-08-14) e de `biahflow/portal` (ex
-    `dcamppos83/biahflow-portal`, migrado em 2026-08-17).
+    (migrou de dcamppos83 em 2026-08-14), de `biahflow/portal` (ex
+    `dcamppos83/biahflow-portal`, migrado em 2026-08-17) e de
+    `biahflow/portal-cliente` (ex `dcamppos83/biahflow-portal-cliente`, migrado no
+    mesmo dia — o último repositório de produto que estava na conta pessoal).
   EOT
   type        = list(string)
   default = [
-    "dcamppos83/biahflow-portal-cliente",
+    "biahflow/portal-cliente",
     "biahflow/portal",
     "biahflow/site",
     "dcamppos83/OikOS",
@@ -49,7 +51,7 @@ variable "deploy_sa_repos" {
   EOT
   type        = list(string)
   default = [
-    "dcamppos83/biahflow-portal-cliente",
+    "biahflow/portal-cliente",
     "biahflow/portal",
     "biahflow/site",
     "dcamppos83/OikOS",
