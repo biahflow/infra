@@ -24,15 +24,16 @@ variable "infra_repo" {
 
 variable "repos_allowlist" {
   description = <<-EOT
-    Repositórios autorizados no pool de hml. Os cinco primeiros são o estado já
-    aplicado (`biahflow/site` migrou de dcamppos83 em 2026-08-14); `biahflow/infra`
-    é o acréscimo desta infraestrutura — o primeiro plan pós-import mostra
-    exatamente essa mudança.
+    Repositórios autorizados no pool de hml. O caminho aqui é a claim
+    `assertion.repository` do token do GitHub: quando um repo muda de dono, ele
+    para de autenticar até esta lista mudar junto — foi o caso de `biahflow/site`
+    (migrou de dcamppos83 em 2026-08-14) e de `biahflow/portal` (ex
+    `dcamppos83/biahflow-portal`, migrado em 2026-08-17).
   EOT
   type        = list(string)
   default = [
     "dcamppos83/biahflow-portal-cliente",
-    "dcamppos83/biahflow-portal",
+    "biahflow/portal",
     "biahflow/site",
     "dcamppos83/OikOS",
     "biahflow/eliseu",
@@ -49,7 +50,7 @@ variable "deploy_sa_repos" {
   type        = list(string)
   default = [
     "dcamppos83/biahflow-portal-cliente",
-    "dcamppos83/biahflow-portal",
+    "biahflow/portal",
     "biahflow/site",
     "dcamppos83/OikOS",
     "biahflow/eliseu",
