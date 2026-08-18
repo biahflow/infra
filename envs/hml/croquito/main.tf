@@ -152,7 +152,12 @@ module "api" {
   min_instances = 0
   max_instances = 3
 
-  depends_on = [google_service_account_iam_member.infra_deploy_actas]
+  # Mesma razão do Keycloak: o secret vem antes do serviço, para que uma revisão
+  # nova nunca nasça lendo credencial velha.
+  depends_on = [
+    google_service_account_iam_member.infra_deploy_actas,
+    module.secrets,
+  ]
 }
 
 module "worker" {
@@ -171,7 +176,10 @@ module "worker" {
   min_instances = 0
   max_instances = 3
 
-  depends_on = [google_service_account_iam_member.infra_deploy_actas]
+  depends_on = [
+    google_service_account_iam_member.infra_deploy_actas,
+    module.secrets,
+  ]
 }
 
 # O quinto serviço, `croquito-medicao-hml`, saiu daqui em 2026-08-18. A F-003 do croquito
@@ -198,7 +206,15 @@ module "auth" {
   min_instances = 1
   max_instances = 1
 
-  depends_on = [google_service_account_iam_member.infra_deploy_actas]
+  # O secret vem antes do serviço, e a razão é concreta: mexer no template cria
+  # revisão nova, revisão nova lê `:latest` ao subir, e `min_instances = 1` exige
+  # que ela fique **saudável** para o apply terminar. Sem esta ordem, a revisão
+  # nasce com a credencial velha e morre no startup probe — foi o que aconteceu no
+  # apply de 2026-08-18, que subiu a revisão 00017 do Keycloak contra o host morto.
+  depends_on = [
+    google_service_account_iam_member.infra_deploy_actas,
+    module.secrets,
+  ]
 }
 
 # A push subscription invoca o worker com o OIDC token da SA dedicada.
