@@ -251,9 +251,11 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # Só este stack fala com o Neon: ele lê a credencial corrente do banco e a
-      # propaga para o Secret Manager. Chave de leitura basta.
+      # propaga para o Secret Manager. Chave de leitura basta. Projeto, branch,
+      # role e banco têm default no stack — `TF_VAR_*` aqui seria pior que inútil,
+      # porque variável de repositório inexistente vira string vazia e SOBRESCREVE
+      # o default em vez de deixá-lo valer.
       NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
-      TF_VAR_neon_project_id: ${{ vars.NEON_PROJECT_ID }}
     defaults:
       run:
         working-directory: envs/hml/croquito

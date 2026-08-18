@@ -119,9 +119,11 @@ jobs:
       # Inócuo nos stacks que não falam com a Cloudflare.
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       # Idem para o Neon: só envs/hml/croquito o consulta, para ler a credencial
-      # corrente do banco e propagá-la ao Secret Manager.
+      # corrente do banco e propagá-la ao Secret Manager. Projeto, branch, role e
+      # banco têm default no stack — `TF_VAR_*` aqui seria pior que inútil, porque
+      # variável de repositório inexistente vira string vazia e SOBRESCREVE o
+      # default em vez de deixá-lo valer.
       NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
-      TF_VAR_neon_project_id: ${{ vars.NEON_PROJECT_ID }}
     defaults:
       run:
         working-directory: ${{ matrix.stack }}

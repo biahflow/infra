@@ -62,13 +62,11 @@ export CLOUDFLARE_API_TOKEN=...                # Zone Read + DNS Edit em biahflo
                                                # envs/hml/croquito-edge exige também
                                                # Account -> Workers Scripts -> Edit
 export NEON_API_KEY=...                        # só envs/hml/croquito; leitura basta
-export TF_VAR_neon_project_id=...              # projeto Neon de hml, sem default
 ```
 
-`NEON_API_KEY` e `TF_VAR_neon_project_id` valem só para `envs/hml/croquito`, que lê a
-credencial corrente do banco e a propaga para o Secret Manager — o stack não cria nem
-rotaciona nada no Neon. No CI eles entram como `secrets.NEON_API_KEY` e
-`vars.NEON_PROJECT_ID`.
+`NEON_API_KEY` vale só para `envs/hml/croquito`, que lê a credencial corrente do banco e a
+propaga para o Secret Manager — o stack não cria nem rotaciona nada no Neon. Projeto, branch,
+role e banco têm default no stack. No CI a chave entra como `secrets.NEON_API_KEY`.
 
 `CLOUDFLARE_API_TOKEN` só é necessário em `envs/global/dns` e
 `envs/hml/eliseu-demo`.
