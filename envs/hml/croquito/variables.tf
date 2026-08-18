@@ -68,7 +68,23 @@ variable "neon_role" {
 }
 
 variable "neon_database" {
-  description = "Banco dentro da branch. O Keycloak vive no schema `keycloak` deste mesmo banco."
+  description = "Banco dentro da branch, compartilhado pela aplicação e pelo Keycloak em schemas próprios."
   type        = string
   default     = "neondb"
+}
+
+# Um schema por componente, e nenhum dos dois é `public`. Os dois schemas são criados fora
+# daqui, junto com a branch do Neon: este stack lê o banco e não manda nele (ADR-0031, D1.1).
+# Schema ausente é falha barulhenta no boot, nunca queda silenciosa para `public` — foi
+# exatamente essa queda que misturou as tabelas do Keycloak com as da aplicação.
+variable "croquito_schema" {
+  description = "Schema da aplicação (API e worker) dentro do banco de homologação."
+  type        = string
+  default     = "croquito"
+}
+
+variable "keycloak_schema" {
+  description = "Schema do Keycloak dentro do mesmo banco."
+  type        = string
+  default     = "keycloak"
 }

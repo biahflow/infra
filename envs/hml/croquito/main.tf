@@ -424,12 +424,22 @@ locals {
 
   # `urlencode` na senha: ela vai no userinfo da URL, e um caractere especial não
   # escapado transforma credencial válida em erro de parsing difícil de ler.
+  #
+  # `options=-csearch_path%3D<schema>` sem `public` na lista, de propósito: schema único no
+  # `search_path` faz `current_schema()` virar NULL quando ele não existe, e o job de banco
+  # recusa criar tabela em vez de recriá-las caladamente em `public`. Com `,public` no fim,
+  # um schema ausente cairia de volta para lá — que é como as duas metades do banco foram
+  # parar no mesmo lugar. `%3D` porque o `=` viaja dentro de um valor de query string.
   croquito_database_url = join("", [
     "postgresql+psycopg://${var.neon_role}:${urlencode(local.neon_senha)}",
     "@${local.neon_host}/${var.neon_database}?sslmode=require&channel_binding=require",
+    "&options=-csearch_path%3D${var.croquito_schema}",
   ])
 
-  keycloak_jdbc_url = "jdbc:postgresql://${local.neon_host}/${var.neon_database}?sslmode=require&currentSchema=keycloak"
+  # `currentSchema` aqui vale para a sessão JDBC; quem decide onde o Liquibase do Keycloak
+  # cria tabela é `KC_DB_SCHEMA`, no deploy (`.github/workflows/deploy-hml.yml` do croquito).
+  # Os dois precisam apontar para o mesmo schema — este DSN sozinho não move o DDL.
+  keycloak_jdbc_url = "jdbc:postgresql://${local.neon_host}/${var.neon_database}?sslmode=require&currentSchema=${var.keycloak_schema}"
 }
 
 # ---------------------------------------------------------------------------
