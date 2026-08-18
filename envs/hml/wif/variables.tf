@@ -73,6 +73,10 @@ variable "infra_deploy_roles" {
     "roles/storage.admin",
     "roles/pubsub.admin",
     "roles/secretmanager.admin",
+    # `storage.admin` NÃO cobre chave HMAC do interop S3: `storage.hmacKeys.*`
+    # vive só neste papel, e sem ele o apply de envs/hml/croquito falha em 403 ao
+    # criar a chave (visto em 2026-08-18).
+    "roles/storage.hmacKeyAdmin",
     # Atualizar um serviço Cloud Run re-valida a leitura da imagem no Artifact
     # Registry com a credencial de quem aplica; sem reader, o apply de
     # envs/hml/servicos falha em 403 (visto no primeiro apply do croquito).
