@@ -43,6 +43,8 @@ jobs:
               - 'modules/github-wif/**'
             modules_run:
               - 'modules/cloud-run-service/**'
+            modules_secret_manager:
+              - 'modules/secret-manager/**'
             global_dns:
               - 'envs/global/dns/**'
             hml_wif:
@@ -65,6 +67,7 @@ jobs:
         env:
           MODULES_WIF: ${{ steps.filtro.outputs.modules_wif }}
           MODULES_RUN: ${{ steps.filtro.outputs.modules_run }}
+          MODULES_SECRET_MANAGER: ${{ steps.filtro.outputs.modules_secret_manager }}
           GLOBAL_DNS: ${{ steps.filtro.outputs.global_dns }}
           HML_WIF: ${{ steps.filtro.outputs.hml_wif }}
           HML_SERVICOS: ${{ steps.filtro.outputs.hml_servicos }}
@@ -76,14 +79,21 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Mudança num módulo afeta os stacks que o consomem; o terceiro
-          # argumento diz qual filtro de módulo vale para o stack.
+          # Mudança num módulo afeta os stacks que o consomem; do terceiro
+          # argumento em diante vêm os filtros dos módulos daquele stack — um
+          # stack pode consumir mais de um.
           avaliar() {
-            if [ "$2" = 'true' ] || [ "${3:-false}" = 'true' ]; then
-              echo "$1=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "$1=false" >> "$GITHUB_OUTPUT"
-            fi
+            local saida="$1"
+            shift
+
+            for filtro in "$@"; do
+              if [ "${filtro:-false}" = 'true' ]; then
+                echo "$saida=true" >> "$GITHUB_OUTPUT"
+                return 0
+              fi
+            done
+
+            echo "$saida=false" >> "$GITHUB_OUTPUT"
           }
 
           avaliar global_dns "$GLOBAL_DNS"
@@ -91,7 +101,7 @@ jobs:
           avaliar hml_servicos "$HML_SERVICOS" "$MODULES_RUN"
           avaliar hml_eliseu_demo "$HML_ELISEU_DEMO"
           avaliar hml_rede "$HML_REDE"
-          avaliar hml_croquito "$HML_CROQUITO" "$MODULES_RUN"
+          avaliar hml_croquito "$HML_CROQUITO" "$MODULES_RUN" "$MODULES_SECRET_MANAGER"
           avaliar hml_croquito_edge "$HML_CROQUITO_EDGE"
           avaliar prd_wif "$PRD_WIF" "$MODULES_WIF"
 
@@ -239,6 +249,11 @@ jobs:
     needs: [detectar, hml_wif, hml_rede]
     if: ${{ !cancelled() && !failure() && needs.detectar.outputs.hml_croquito == 'true' }}
     runs-on: ubuntu-latest
+    env:
+      # Só este stack fala com o Neon: ele lê a credencial corrente do banco e a
+      # propaga para o Secret Manager. Chave de leitura basta.
+      NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+      TF_VAR_neon_project_id: ${{ vars.NEON_PROJECT_ID }}
     defaults:
       run:
         working-directory: envs/hml/croquito
