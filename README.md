@@ -9,12 +9,13 @@ Terraform da biahflow: identidade de CI, serviços Cloud Run e DNS, em
 modules/
   github-wif/          pool + provider OIDC do GitHub + SA de deploy e seus bindings
   cloud-run-service/   casca de serviço Cloud Run v2 (o CI da app é dono da revisão)
+  secret-manager/      secrets: casca, quem lê e — quando o TF é dono — o valor corrente
 envs/
   global/dns/          zona Cloudflare biahflow.ai (thin: só o zone_id e registros compartilhados)
   hml/wif/             identidade de CI em hml — importa o que já existia
   hml/servicos/        serviço eliseu-hml
   hml/eliseu-demo/     eliseu-demo.biahflow.ai (CNAME + domain mapping)
-  hml/croquito/        croquito em hml: 5 serviços Cloud Run, buckets, Pub/Sub, secrets
+  hml/croquito/        croquito em hml: 4 serviços Cloud Run, bucket, Pub/Sub, secrets e HMAC
   hml/croquito-edge/   croquito-hml.biahflow.ai (CNAME proxied + Worker de host-override)
   prd/wif/             identidade de CI em prd — tudo novo
   prd/servicos/        scaffold, ainda sem conteúdo
@@ -36,6 +37,21 @@ para que o mapa do repositório seja o mapa do bucket.
 Os buckets de state existem fora do Terraform (com versionamento, em
 `us-east1`): eles guardam o estado, então não podem depender dele.
 
+## Segredos
+
+Desde 2026-08-18 o Terraform é dono do **valor** dos segredos que ele mesmo produz ou lê —
+chave HMAC, credencial de banco —, e não só da casca. A política anterior (casca no TF, valor
+por `gcloud secrets versions add`) caiu porque coordenada que só um humano sabe atualizar é
+coordenada que ninguém atualiza: o endpoint do Neon de `hml` mudou, o secret continuou
+apontando para o antigo, o Keycloak parou de subir e o job de schema barrou a esteira do
+croquito por quatro dias.
+
+A contrapartida é direta e não tem meio-termo: **quem lê o state lê esses
+segredos**. Os buckets de state são privados e versionados, e o acesso a eles é o
+acesso às credenciais dos ambientes. Segredo que o Terraform não produz continua
+fora — o secret nasce como casca, sem versão, e quem o preenche está declarado no
+stack. Detalhe em [`modules/secret-manager`](modules/secret-manager/README.md).
+
 ## Rodando local
 
 Credenciais:
@@ -45,7 +61,12 @@ gcloud auth application-default login          # GCP (ou GOOGLE_APPLICATION_CRED
 export CLOUDFLARE_API_TOKEN=...                # Zone Read + DNS Edit em biahflow.ai
                                                # envs/hml/croquito-edge exige também
                                                # Account -> Workers Scripts -> Edit
+export NEON_API_KEY=...                        # só envs/hml/croquito; leitura basta
 ```
+
+`NEON_API_KEY` vale só para `envs/hml/croquito`, que lê a credencial corrente do banco e a
+propaga para o Secret Manager — o stack não cria nem rotaciona nada no Neon. Projeto, branch,
+role e banco têm default no stack. No CI a chave entra como `secrets.NEON_API_KEY`.
 
 `CLOUDFLARE_API_TOKEN` só é necessário em `envs/global/dns` e
 `envs/hml/eliseu-demo`.

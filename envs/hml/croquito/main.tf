@@ -1,15 +1,21 @@
-# Homologação do croquito: cinco serviços Cloud Run com um único host público.
+# Homologação do croquito: quatro serviços Cloud Run com um único host público.
 #
 # Só o `croquito-web-hml` (nginx: dois SPAs + proxy same-origin) aceita tráfego
-# da internet; API, medição e Keycloak têm ingress interno e só são alcançados
-# pelo proxy, via Direct VPC egress. O worker é interno e privado: quem o invoca
-# é a push subscription do Pub/Sub, com OIDC token da SA dedicada.
+# da internet; API e Keycloak têm ingress interno e só são alcançados pelo proxy,
+# via Direct VPC egress. O worker é interno e privado: quem o invoca é a push
+# subscription do Pub/Sub, com OIDC token da SA dedicada.
+#
+# Segredo é Terraform desde 2026-08-18: as cascas, o IAM e o valor corrente saem
+# do módulo `secret-manager`, e a chave HMAC do interop S3 nasce aqui. A política
+# anterior — casca no TF, valor por `gcloud secrets versions add` — caiu porque
+# coordenada de banco que só um humano sabe atualizar é coordenada que ninguém
+# atualiza: o endpoint do Neon mudou, o secret continuou apontando para o antigo,
+# o Keycloak parou de subir e o job de schema barrou a esteira do croquito por
+# quatro dias sem que nada no repositório soubesse dizer isso. A contrapartida
+# está declarada no README do módulo: o valor mora no state, e quem lê o state lê
+# os segredos.
 #
 # O que este stack NÃO faz, de propósito:
-#   - valores de secret (as cascas nascem aqui; versões entram por `gcloud
-#     secrets versions add`, nunca por Terraform nem por CI do GitHub);
-#   - chave HMAC do interop S3 (criada fora do TF para o segredo não morar no
-#     state; a SA dona dela nasce aqui);
 #   - env/imagem/volumes dos serviços (CI do biahflow/croquito é o dono — ver
 #     lifecycle do módulo cloud-run-service).
 
@@ -17,6 +23,9 @@ provider "google" {
   project = var.project
   region  = var.region
 }
+
+# `NEON_API_KEY` no ambiente. Escopo de leitura basta para o que este stack faz.
+provider "neon" {}
 
 data "google_project" "este" {
   project_id = var.project
@@ -47,17 +56,12 @@ resource "google_service_account" "worker" {
   display_name = "Runtime do worker do croquito em hml"
 }
 
-resource "google_service_account" "medicao" {
-  account_id   = "croquito-medicao-hml"
-  display_name = "Runtime do servidor de medição do croquito em hml"
-}
-
 resource "google_service_account" "auth" {
   account_id   = "croquito-auth-hml"
   display_name = "Runtime do Keycloak do croquito em hml"
 }
 
-# Dona da chave HMAC do interop S3 (a chave em si é criada fora do TF).
+# Dona da chave HMAC do interop S3.
 resource "google_service_account" "storage" {
   account_id   = "croquito-hml-storage"
   display_name = "Acesso a artefatos via interop S3/HMAC (croquito hml)"
@@ -74,11 +78,10 @@ resource "google_service_account" "push" {
 # de actAs nelas. Binding por SA, nunca na default de compute.
 locals {
   runtime_sas = {
-    web     = google_service_account.web
-    api     = google_service_account.api
-    worker  = google_service_account.worker
-    medicao = google_service_account.medicao
-    auth    = google_service_account.auth
+    web    = google_service_account.web
+    api    = google_service_account.api
+    worker = google_service_account.worker
+    auth   = google_service_account.auth
     # Criar a push subscription com oidc_token também exige actAs na SA de push
     # por quem aplica — o Pub/Sub valida na criação, não só na entrega.
     push = google_service_account.push
@@ -171,24 +174,12 @@ module "worker" {
   depends_on = [google_service_account_iam_member.infra_deploy_actas]
 }
 
-module "medicao" {
-  source = "../../../modules/cloud-run-service"
-
-  nome            = "croquito-medicao-hml"
-  project         = var.project
-  region          = var.region
-  image_inicial   = var.image_inicial
-  service_account = google_service_account.medicao.email
-
-  publico = true
-  ingress = "INGRESS_TRAFFIC_INTERNAL_ONLY"
-
-  # Locks de rodada em memória do servidor de medição: uma instância só.
-  min_instances = 0
-  max_instances = 1
-
-  depends_on = [google_service_account_iam_member.infra_deploy_actas]
-}
+# O quinto serviço, `croquito-medicao-hml`, saiu daqui em 2026-08-18. A F-003 do croquito
+# migrou a medição para a API `/v1` e removeu o modo hospedado do código, da esteira e da
+# borda; o serviço foi removido do projeto por ato humano, e o stack ainda o declarava — o
+# próximo apply o teria recriado, ressuscitando um caminho que o produto já não tem. Com ele
+# saem a runtime SA `croquito-medicao-hml` — que, ao contrário do serviço, ainda existe e
+# será destruída de fato — e o bucket `croquito-hml-rounds`.
 
 module "auth" {
   source = "../../../modules/cloud-run-service"
@@ -240,14 +231,6 @@ resource "google_storage_bucket" "artifacts" {
   }
 }
 
-resource "google_storage_bucket" "rounds" {
-  name     = "croquito-hml-rounds"
-  location = upper(var.region)
-
-  uniform_bucket_level_access = true
-  public_access_prevention    = "enforced"
-}
-
 # API e worker acessam artefatos com a HMAC da SA de storage; a permissão da
 # chave é a permissão da SA.
 resource "google_storage_bucket_iam_member" "artifacts_storage_sa" {
@@ -256,13 +239,12 @@ resource "google_storage_bucket_iam_member" "artifacts_storage_sa" {
   member = "serviceAccount:${google_service_account.storage.email}"
 }
 
-# O servidor de medição monta o bucket de rodadas por GCS FUSE com a própria
-# runtime SA.
-resource "google_storage_bucket_iam_member" "rounds_medicao" {
-  bucket = google_storage_bucket.rounds.name
-  role   = "roles/storage.objectAdmin"
-  member = "serviceAccount:${google_service_account.medicao.email}"
-}
+# `croquito-hml-rounds` saiu com o modo hospedado (ver acima). O bucket guardava a rodada
+# montada por FUSE, e em 2026-08-18 verificou-se que ele **já não existe no projeto** (404) —
+# foi removido por ato humano junto com o serviço. Tirá-lo daqui é reconciliação: o refresh
+# nota a ausência e o state para de declarar um recurso que o mundo não tem. A rodada que
+# estivesse nele não foi migrada por ninguém, por decisão registrada, e permanece
+# reproduzível pelo CLI.
 
 # ---------------------------------------------------------------------------
 # Pub/Sub: tópico de processamento, DLQ e push subscription para o worker.
@@ -350,55 +332,153 @@ resource "google_pubsub_subscription_iam_member" "processing_subscriber_agent" {
 }
 
 # ---------------------------------------------------------------------------
-# Secret Manager: cascas. Valores entram por `gcloud secrets versions add`.
+# Chave HMAC do interop S3. O par (access_id, secret) é o que a API e o worker
+# usam para assinar URL de artefato — o GCS só devolve o segredo na criação, e é
+# por isso que a chave precisa nascer aqui: importar uma chave criada fora
+# traria o `secret` vazio, e o secret gravado seria mentira.
 # ---------------------------------------------------------------------------
 
+#
+# A chave anterior, criada fora do Terraform, **continua válida** depois deste
+# apply: são duas chaves ativas até alguém desativar a primeira. Ela não pode ser
+# adotada (o segredo não é recuperável) nem desativada às cegas — desativar antes
+# de o CI do croquito publicar a revisão que lê o secret novo derruba o upload de
+# artefato, porque a revisão em execução ainda assina com a chave velha. A ordem é:
+# apply aqui, deploy do croquito, e só então desativar a antiga pelo access_id que
+# a versão desabilitada de `croquito-hml-storage-hmac-id` ainda guarda.
+resource "google_storage_hmac_key" "storage" {
+  service_account_email = google_service_account.storage.email
+}
+
+# ---------------------------------------------------------------------------
+# Neon: o PostgreSQL gerenciado de hml.
+#
+# Este stack **não cria, não rotaciona e não apaga nada** no Neon: ele LÊ o
+# projeto e propaga a credencial corrente para o Secret Manager. É de propósito.
+# O incidente de 2026-08-14 não foi uma senha fraca nem uma política de expiração
+# — foi a credencial do banco divergir do que o ambiente guardava, sem que nada
+# reconciliasse as duas pontas. Reconciliar é exatamente o que um `data` faz, e
+# fazê-lo sem poder de escrita mantém o raio de ação deste stack longe do banco.
+#
+# API/worker falam psycopg; o Keycloak fala JDBC e vive no schema `keycloak` do
+# mesmo banco, com usuário e senha em secrets próprios — a forma dos dois DSNs
+# veio dos secrets em uso, conferida em 2026-08-18.
+# ---------------------------------------------------------------------------
+
+# A branch é declarada por NOME, e o host vem do endpoint dela. Ninguém escreve
+# hostname de banco à mão aqui — foi um hostname à mão que quebrou o ambiente:
+# os secrets apontavam para `ep-still-firefly-audokk6w`, endpoint que não existe
+# mais em nenhum projeto desta conta, e o proxy do Neon responde a endpoint
+# desconhecido com falha de autenticação. Por isso o log dizia "password
+# authentication failed" com a senha certa.
+data "neon_branches" "hml" {
+  project_id = var.neon_project_id
+}
+
 locals {
+  branch = one([for b in data.neon_branches.hml.branches : b if b.name == var.neon_branch])
+}
+
+data "neon_branch_endpoints" "hml" {
+  project_id = var.neon_project_id
+  branch_id  = local.branch.id
+
+  lifecycle {
+    precondition {
+      condition     = local.branch != null
+      error_message = "Branch '${var.neon_branch}' não existe no projeto Neon ${var.neon_project_id}."
+    }
+  }
+}
+
+data "neon_branch_role_password" "hml" {
+  project_id = var.neon_project_id
+  branch_id  = local.branch.id
+  role_name  = var.neon_role
+}
+
+locals {
+  # `one()` porque a branch tem exatamente um endpoint de escrita: se um dia tiver
+  # dois, é melhor o plano parar do que sortear qual deles o ambiente usa.
+  neon_host = one([
+    for e in data.neon_branch_endpoints.hml.endpoints : e.host if e.type == "read_write"
+  ])
+
+  neon_senha = data.neon_branch_role_password.hml.password
+
+  # `urlencode` na senha: ela vai no userinfo da URL, e um caractere especial não
+  # escapado transforma credencial válida em erro de parsing difícil de ler.
+  croquito_database_url = join("", [
+    "postgresql+psycopg://${var.neon_role}:${urlencode(local.neon_senha)}",
+    "@${local.neon_host}/${var.neon_database}?sslmode=require&channel_binding=require",
+  ])
+
+  keycloak_jdbc_url = "jdbc:postgresql://${local.neon_host}/${var.neon_database}?sslmode=require&currentSchema=keycloak"
+}
+
+# ---------------------------------------------------------------------------
+# Secret Manager.
+# ---------------------------------------------------------------------------
+
+module "secrets" {
+  source  = "../../../modules/secret-manager"
+  project = var.project
+
   # secret -> SAs de runtime que podem lê-lo.
   secrets = {
-    "croquito-hml-database-url" = [
-      google_service_account.api.email,
-      google_service_account.worker.email,
-    ]
-    "croquito-hml-storage-hmac-id" = [
-      google_service_account.api.email,
-      google_service_account.worker.email,
-    ]
-    "croquito-hml-storage-hmac-secret" = [
-      google_service_account.api.email,
-      google_service_account.worker.email,
-    ]
-    "croquito-hml-kc-db-url"      = [google_service_account.auth.email]
-    "croquito-hml-kc-db-user"     = [google_service_account.auth.email]
-    "croquito-hml-kc-db-password" = [google_service_account.auth.email]
-    "croquito-hml-kc-bootstrap-admin-password" = [
-      google_service_account.auth.email,
-    ]
-  }
-
-  secret_bindings = merge([
-    for secret, emails in local.secrets : {
-      for email in emails : "${secret}|${email}" => { secret = secret, email = email }
+    "croquito-hml-database-url" = {
+      acessores = [
+        google_service_account.api.email,
+        google_service_account.worker.email,
+      ]
     }
-  ]...)
-}
+    "croquito-hml-storage-hmac-id" = {
+      acessores = [
+        google_service_account.api.email,
+        google_service_account.worker.email,
+      ]
+    }
+    "croquito-hml-storage-hmac-secret" = {
+      acessores = [
+        google_service_account.api.email,
+        google_service_account.worker.email,
+      ]
+    }
+    "croquito-hml-kc-db-url"      = { acessores = [google_service_account.auth.email] }
+    "croquito-hml-kc-db-user"     = { acessores = [google_service_account.auth.email] }
+    "croquito-hml-kc-db-password" = { acessores = [google_service_account.auth.email] }
+    "croquito-hml-kc-bootstrap-admin-password" = {
+      acessores = [google_service_account.auth.email]
+    }
+  }
 
-resource "google_secret_manager_secret" "este" {
-  for_each = local.secrets
-
-  secret_id = each.key
-
-  replication {
-    auto {}
+  # `KC_BOOTSTRAP_ADMIN_PASSWORD` fica fora deste mapa de propósito: ele só age na
+  # criação do primeiro admin, então gerar um valor novo aqui não mudaria a senha
+  # do admin que já existe no realm — só faria o secret divergir do mundo. Fica
+  # como casca, e a troca dessa senha é ato no console do Keycloak.
+  valores = {
+    "croquito-hml-storage-hmac-id"     = google_storage_hmac_key.storage.access_id
+    "croquito-hml-storage-hmac-secret" = google_storage_hmac_key.storage.secret
+    "croquito-hml-database-url"        = local.croquito_database_url
+    "croquito-hml-kc-db-url"           = local.keycloak_jdbc_url
+    "croquito-hml-kc-db-user"          = var.neon_role
+    "croquito-hml-kc-db-password"      = local.neon_senha
   }
 }
 
-resource "google_secret_manager_secret_iam_member" "acesso" {
-  for_each = local.secret_bindings
+# As cascas e os bindings nasceram neste stack antes de existir o módulo. Sem
+# estes dois blocos o plano destrói e recria os sete secrets — e serviço sem
+# credencial é exatamente o incidente que este stack está consertando. `moved`
+# sem índice move todas as instâncias do `for_each` preservando as chaves, que
+# são idênticas nos dois lados.
+moved {
+  from = google_secret_manager_secret.este
+  to   = module.secrets.google_secret_manager_secret.este
+}
 
-  secret_id = google_secret_manager_secret.este[each.value.secret].secret_id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${each.value.email}"
+moved {
+  from = google_secret_manager_secret_iam_member.acesso
+  to   = module.secrets.google_secret_manager_secret_iam_member.acesso
 }
 
 # ---------------------------------------------------------------------------
