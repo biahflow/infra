@@ -85,5 +85,9 @@ variable "infra_deploy_roles" {
     "roles/dns.admin",
     # envs/hml/rede adota o router/NAT e envs/hml/croquito cria a subnet do web.
     "roles/compute.networkAdmin",
+    # envs/hml/croquito habilita APIs de projeto (`google_project_service`, hoje
+    # vision.googleapis.com para o braço de OCR da F-009); sem este papel o apply
+    # falha em 403 "Permission denied to enable service" (visto em 2026-08-19).
+    "roles/serviceusage.serviceUsageAdmin",
   ]
 }
