@@ -12,6 +12,13 @@
 # no state pela origem — o secret version não piora o que já é verdade. Valor que
 # venha de fora do Terraform tem caminho melhor (`secret_data_wo`, write-only,
 # disponível no provider 6.x): ver README.
+#
+# `var.valores_wo` é esse caminho: o valor nunca é gravado no state. Como o
+# provider não guarda o valor write-only em lugar nenhum para comparar, ele não
+# tem como detectar sozinho que o valor mudou — por isso `var.valores_wo_versions`
+# existe: é o gatilho explícito de rotação (`secret_data_wo_version`). Os dois
+# caminhos são mutuamente exclusivos por secret (validado nas variáveis): um
+# secret é dono de `var.valores` OU de `var.valores_wo`, nunca dos dois.
 
 locals {
   # for_each precisa de um id estável por par secret×leitor.
@@ -23,7 +30,8 @@ locals {
 
   # `keys()` de um map sensível é sensível, e `for_each` recusa valor sensível.
   # O NOME do secret não é segredo — o valor é, e ele não passa por aqui.
-  com_valor = toset(nonsensitive(keys(var.valores)))
+  com_valor    = toset(nonsensitive(keys(var.valores)))
+  com_valor_wo = toset(nonsensitive(keys(var.valores_wo)))
 }
 
 resource "google_secret_manager_secret" "este" {
@@ -55,6 +63,25 @@ resource "google_secret_manager_secret_version" "corrente" {
 
   secret      = google_secret_manager_secret.este[each.key].id
   secret_data = var.valores[each.key]
+
+  deletion_policy = "DISABLE"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+# Write-only: mesma troca segura de `corrente` (versão nova antes da antiga sair,
+# antiga desabilitada, não destruída), mas o valor não fica no state. O gatilho de
+# mudança é `secret_data_wo_version`, não o valor em si — por isso a rotação exige
+# incrementar `var.valores_wo_versions[each.key]`, e não basta mudar o texto do
+# segredo.
+resource "google_secret_manager_secret_version" "corrente_wo" {
+  for_each = local.com_valor_wo
+
+  secret                 = google_secret_manager_secret.este[each.key].id
+  secret_data_wo         = var.valores_wo[each.key]
+  secret_data_wo_version = var.valores_wo_versions[each.key]
 
   deletion_policy = "DISABLE"
 
