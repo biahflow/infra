@@ -36,6 +36,26 @@ locals {
 }
 
 # ---------------------------------------------------------------------------
+# APIs do projeto.
+#
+# Nenhum `google_project_service` existia neste repositório antes deste recurso
+# (verificado por grep em todo o `biahflow/infra`) — as APIs que os outros
+# serviços deste stack usam (Cloud Run, Pub/Sub, Secret Manager) já estavam
+# habilitadas no projeto `biahflow-hml` por fora do Terraform, e nenhum stack
+# assumiu a propriedade delas. Não há, portanto, um padrão local a seguir; este
+# é o recurso padrão do provider `google` para o caso, com o mínimo de opção.
+# `disable_on_destroy = false` porque uma API de projeto pode ter outro
+# consumidor fora deste stack — destruir este recurso não deve desligá-la.
+# ---------------------------------------------------------------------------
+
+resource "google_project_service" "vision" {
+  project = var.project
+  service = "vision.googleapis.com"
+
+  disable_on_destroy = false
+}
+
+# ---------------------------------------------------------------------------
 # Service accounts de runtime (uma por serviço) + as duas de função específica.
 # A atribuição runtime SA -> serviço é do CI (template.service_account está no
 # ignore_changes do módulo); aqui elas existem e recebem IAM de recurso.
@@ -244,6 +264,19 @@ resource "google_storage_bucket" "artifacts" {
     method          = ["PUT", "GET", "HEAD"]
     response_header = ["Content-Type"]
     max_age_seconds = 3600
+  }
+
+  # Retenção prometida em docs/security/DATA_RETENTION.md (croquito): PDF original,
+  # páginas renderizadas, respostas brutas de provider e pacote exportado expiram em
+  # 7 dias. Este é o único bucket de artefatos do ambiente — a regra vale para todo
+  # objeto nele, não só para o caminho de providers reais da F-009.
+  lifecycle_rule {
+    condition {
+      age = 7
+    }
+    action {
+      type = "Delete"
+    }
   }
 }
 
@@ -476,6 +509,26 @@ module "secrets" {
     "croquito-hml-kc-bootstrap-admin-password" = {
       acessores = [google_service_account.auth.email]
     }
+
+    # Chaves de terceiro (OpenAI, Anthropic) para a suite de providers reais da
+    # F-009. O valor NÃO nasce de um data source do Terraform (é chave de outro
+    # fornecedor) nem entra por `gcloud secrets versions add`: a coordenada de
+    # segredo que só um humano lembra de atualizar foi exatamente o defeito do
+    # incidente do ADR-0031 (endpoint do Neon desatualizado, quatro dias fora do
+    # ar). O caminho aqui é o mesmo espírito do ADR-0031 D1 — propagar é a
+    # esteira, não um comando avulso —, mas write-only (`valores_wo` abaixo):
+    # a chave chega por `TF_VAR_*` a partir de um GitHub Actions secret
+    # (`.github/workflows/plan.yml`/`apply.yml`, mesmo padrão do `NEON_API_KEY`)
+    # e nunca é gravada no state, porque, ao contrário da senha do Neon e da
+    # chave HMAC, ela não nasce de um recurso deste Terraform — não há razão
+    # para o state passar a guardá-la. Só a SA do worker lê: é o único lugar que
+    # chama os providers reais (`build_real_provider_suite`).
+    "croquito-hml-openai-api-key" = {
+      acessores = [google_service_account.worker.email]
+    }
+    "croquito-hml-anthropic-api-key" = {
+      acessores = [google_service_account.worker.email]
+    }
   }
 
   # `KC_BOOTSTRAP_ADMIN_PASSWORD` fica fora deste mapa de propósito: ele só age na
@@ -489,6 +542,19 @@ module "secrets" {
     "croquito-hml-kc-db-url"           = local.keycloak_jdbc_url
     "croquito-hml-kc-db-user"          = var.neon_role
     "croquito-hml-kc-db-password"      = local.neon_senha
+  }
+
+  # Write-only: chave de terceiro que chega por `TF_VAR_*` (GitHub Actions
+  # secret), nunca gravada no state. Sem default nas variáveis correspondentes
+  # (ver variables.tf) — plan/apply falham fail-closed se a env não existir, em
+  # vez de gravar secret vazio silenciosamente.
+  valores_wo = {
+    "croquito-hml-openai-api-key"    = var.openai_api_key
+    "croquito-hml-anthropic-api-key" = var.anthropic_api_key
+  }
+  valores_wo_versions = {
+    "croquito-hml-openai-api-key"    = var.providers_api_key_version
+    "croquito-hml-anthropic-api-key" = var.providers_api_key_version
   }
 }
 

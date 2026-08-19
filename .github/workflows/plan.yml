@@ -124,6 +124,12 @@ jobs:
       # variável de repositório inexistente vira string vazia e SOBRESCREVE o
       # default em vez de deixá-lo valer.
       NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+      # As duas chaves de provider da suite real do croquito (F-009), write-only
+      # no Secret Manager (envs/hml/croquito/variables.tf: `openai_api_key`,
+      # `anthropic_api_key`, SEM default — fail closed se o secret não existir).
+      # Só envs/hml/croquito as consome; inócuo nos demais stacks da matriz.
+      TF_VAR_openai_api_key: ${{ secrets.CROQUITO_OPENAI_API_KEY }}
+      TF_VAR_anthropic_api_key: ${{ secrets.CROQUITO_ANTHROPIC_API_KEY }}
     defaults:
       run:
         working-directory: ${{ matrix.stack }}

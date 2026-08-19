@@ -88,3 +88,48 @@ variable "keycloak_schema" {
   type        = string
   default     = "keycloak"
 }
+
+# As duas chaves de provider da suite real (F-009). SEM default de propósito:
+# plan/apply falham fail-closed se a env `TF_VAR_openai_api_key`/
+# `TF_VAR_anthropic_api_key` não existir, em vez de gravar secret vazio ou usar
+# um valor placeholder silencioso. Só o worker recebe suas SAs de leitura, e o
+# valor entra write-only no Secret Manager (module.secrets, `valores_wo`) —
+# nunca fica no state deste stack. Origem: GitHub Actions secrets
+# `CROQUITO_OPENAI_API_KEY`/`CROQUITO_ANTHROPIC_API_KEY` do repositório
+# `biahflow/infra`, injetados como `TF_VAR_*` em `.github/workflows/plan.yml` e
+# `apply.yml`, mesmo padrão do `NEON_API_KEY`.
+variable "openai_api_key" {
+  description = "Chave da API OpenAI para a suite de providers reais do croquito em hml."
+  type        = string
+  sensitive   = true
+
+  # A ausência da env falha sozinha (sem default), mas um GitHub Actions secret
+  # inexistente/vazio resolve para "" — que sem esta validação viraria uma versão
+  # de secret vazia e válida. Fail closed também para o vazio.
+  validation {
+    condition     = length(var.openai_api_key) > 0
+    error_message = "openai_api_key vazio: confira o GitHub Actions secret CROQUITO_OPENAI_API_KEY do repositório."
+  }
+}
+
+variable "anthropic_api_key" {
+  description = "Chave da API Anthropic para a suite de providers reais do croquito em hml."
+  type        = string
+  sensitive   = true
+
+  validation {
+    condition     = length(var.anthropic_api_key) > 0
+    error_message = "anthropic_api_key vazio: confira o GitHub Actions secret CROQUITO_ANTHROPIC_API_KEY do repositório."
+  }
+}
+
+# Gatilho de rotação write-only (secret_data_wo_version) para as duas chaves
+# acima — o Terraform não guarda o valor delas, então não tem como perceber
+# sozinho que mudou. Incrementar este número troca as duas versões juntas;
+# rotação independente por chave é acréscimo aditivo (duas variáveis), não
+# necessário hoje.
+variable "providers_api_key_version" {
+  description = "Gatilho de rotação write-only para as chaves OpenAI/Anthropic de hml."
+  type        = number
+  default     = 1
+}

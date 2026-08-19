@@ -7,12 +7,13 @@ Terraform é dono dele — o valor corrente.
 
 | Quem | É dono de |
 | --- | --- |
-| Terraform (este módulo) | existência do secret, replicação, `roles/secretmanager.secretAccessor` por leitor, versão corrente dos secrets citados em `valores` |
-| Quem produz o valor | o valor em si — outro recurso do Terraform (chave HMAC, senha de role) ou, para secret fora de `valores`, um caminho declarado no stack |
+| Terraform (este módulo) | existência do secret, replicação, `roles/secretmanager.secretAccessor` por leitor, versão corrente dos secrets citados em `valores` ou `valores_wo` |
+| Quem produz o valor | o valor em si — outro recurso do Terraform (chave HMAC, senha de role), um secret de CI passado por `TF_VAR_*` (caminho `valores_wo`), ou, para secret fora dos dois mapas, um caminho declarado no stack |
 
-Secret sem entrada em `valores` nasce e permanece **casca**: existe, tem IAM, e
-nenhuma versão. É o estado correto para valor que o Terraform não produz e não
-deve inventar.
+Secret sem entrada em `valores` nem em `valores_wo` nasce e permanece **casca**:
+existe, tem IAM, e nenhuma versão. É o estado correto para valor que o Terraform
+não produz e não deve inventar. Um secret usa `valores` OU `valores_wo`, nunca
+os dois (validado nas variáveis).
 
 ## Uso
 
@@ -45,16 +46,36 @@ state pela origem. Passar por este módulo não piora o que já é verdade. O qu
 segue valendo, e é o que torna a decisão sustentável: o state mora em bucket
 privado e versionado, e quem lê o state lê os segredos.
 
-**Para valor que venha de fora do Terraform o caminho é outro.** O provider 6.x
-tem `secret_data_wo` (write-only): o valor vai para a API e não é gravado no
-state, com `secret_data_wo_version` fazendo o papel de gatilho de mudança. Este
-módulo não o expõe porque nenhum consumidor precisa disso hoje — quando precisar,
-é acréscimo aditivo à variável `valores`, não reescrita.
+**Para valor que venha de fora do Terraform o caminho é `valores_wo`.** O
+provider 6.x tem `secret_data_wo` (write-only): o valor vai para a API e não é
+gravado no state. Como o provider não guarda esse valor para comparar, ele
+sozinho não percebe rotação — por isso toda chave em `valores_wo` exige uma
+entrada correspondente em `valores_wo_versions`, e é esse número
+(`secret_data_wo_version`) que aciona a troca, não o texto do segredo.
+
+```hcl
+module "secrets" {
+  source  = "../../../modules/secret-manager"
+  project = var.project
+
+  secrets = {
+    "provider-api-key" = { acessores = [google_service_account.worker.email] }
+  }
+
+  valores_wo = {
+    "provider-api-key" = var.provider_api_key # ex.: TF_VAR_provider_api_key, de um secret do CI
+  }
+  valores_wo_versions = {
+    "provider-api-key" = 1 # incrementar para rotacionar
+  }
+}
+```
 
 ## Rotação
 
 Mudar um valor em `valores` substitui a versão. Duas escolhas tornam a troca
-segura, e as duas estão em `main.tf`:
+segura, e as duas estão em `main.tf` (e valem também para `valores_wo` —
+`corrente_wo` usa o mesmo par):
 
 - `create_before_destroy`: a versão nova nasce antes de a antiga sair, então não
   existe instante em que `latest` não resolve;
@@ -71,7 +92,9 @@ credencial quebrada.
 ## Notas
 
 - O nome do secret não é segredo; o valor é. Por isso `for_each` percorre
-  `nonsensitive(keys(var.valores))` — sem isso o Terraform recusa o `for_each`, e
-  nenhum valor passa por essa expressão.
+  `nonsensitive(keys(var.valores))` (e o mesmo para `valores_wo`) — sem isso o
+  Terraform recusa o `for_each`, e nenhum valor passa por essa expressão.
 - `acessores` é a resposta inteira para "quem lê este segredo". Um binding feito
   fora do módulo não aparece aqui e será removido no próximo apply.
+- Write-only exige Terraform >= 1.11 no executor (recurso de linguagem, não só do
+  provider). Os stacks deste repositório já pinam 1.14.3 no CI.
