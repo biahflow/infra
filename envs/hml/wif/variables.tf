@@ -92,5 +92,9 @@ variable "infra_deploy_roles" {
     # vision.googleapis.com para o braço de OCR da F-009); sem este papel o apply
     # falha em 403 "Permission denied to enable service" (visto em 2026-08-19).
     "roles/serviceusage.serviceUsageAdmin",
+    # envs/hml/croquito cria o processador de OCR do Document AI
+    # (`google_document_ai_processor`, braço alternativo do worker — ADR-0037 do
+    # croquito); criar/gerir processador exige papel de admin do produto.
+    "roles/documentai.admin",
   ]
 }

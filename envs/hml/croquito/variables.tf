@@ -133,3 +133,17 @@ variable "providers_api_key_version" {
   type        = number
   default     = 1
 }
+
+# Multi-região do Document AI, não região de compute: o produto só existe em
+# `us` e `eu` — `us-east1` não é local válido. `us` por decisão humana de
+# 2026-08-20 (mesmo hemisfério do stack; enquadramento LGPD igual ao do Vision).
+variable "docai_location" {
+  description = "Multi-região do processador de Document AI (us ou eu)."
+  type        = string
+  default     = "us"
+
+  validation {
+    condition     = contains(["us", "eu"], var.docai_location)
+    error_message = "docai_location deve ser us ou eu — Document AI não tem região fina."
+  }
+}

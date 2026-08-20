@@ -55,6 +55,45 @@ resource "google_project_service" "vision" {
   disable_on_destroy = false
 }
 
+resource "google_project_service" "documentai" {
+  project = var.project
+  service = "documentai.googleapis.com"
+
+  disable_on_destroy = false
+}
+
+# ---------------------------------------------------------------------------
+# Processador de OCR do Document AI — braço `ocr` alternativo do worker.
+#
+# O adapter no biahflow/croquito (ADR-0037 de lá) monta o Document AI no lugar
+# do Cloud Vision quando `CROQUITO_DOCAI_PROCESSOR` aponta este processador;
+# sem o env, o worker segue no Vision. O nome completo sai no output
+# `docai_processor_name` e é colado literalmente naquele env pelo deploy-hml
+# da aplicação (env de container é do CI da aplicação, não deste stack).
+#
+# `location` é multi-região própria do produto (`us`/`eu`) — Document AI não
+# existe em `us-east1`. Escolha `us` por decisão humana de 2026-08-20: mesmo
+# hemisfério do stack e mesmo enquadramento LGPD do Vision atual.
+# ---------------------------------------------------------------------------
+
+resource "google_document_ai_processor" "ocr" {
+  project      = var.project
+  location     = var.docai_location
+  display_name = "croquito-hml-ocr"
+  type         = "OCR_PROCESSOR"
+
+  depends_on = [google_project_service.documentai]
+}
+
+# Diferente do Vision (que qualquer chamador autenticado usa com a API ligada),
+# o Document AI é resource-scoped: quem chama `:process` precisa de
+# `roles/documentai.apiUser`. Só o worker chama.
+resource "google_project_iam_member" "worker_documentai" {
+  project = var.project
+  role    = "roles/documentai.apiUser"
+  member  = "serviceAccount:${google_service_account.worker.email}"
+}
+
 # ---------------------------------------------------------------------------
 # Service accounts de runtime (uma por serviço) + as duas de função específica.
 # A atribuição runtime SA -> serviço é do CI (template.service_account está no
