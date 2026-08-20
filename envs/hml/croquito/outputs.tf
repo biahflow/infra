@@ -40,3 +40,13 @@ output "hmac_access_id" {
   EOT
   value       = google_storage_hmac_key.storage.access_id
 }
+
+output "docai_processor_name" {
+  description = <<-EOT
+    Nome completo do processador de OCR do Document AI
+    (projects/.../locations/us/processors/...). É o valor literal do env
+    CROQUITO_DOCAI_PROCESSOR no deploy-hml do biahflow/croquito — com ele o worker
+    monta o braço Document AI; sem ele, segue no Cloud Vision (ADR-0037 de lá).
+  EOT
+  value       = google_document_ai_processor.ocr.id
+}
