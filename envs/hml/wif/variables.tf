@@ -34,11 +34,14 @@ variable "repos_allowlist" {
     Em 2026-08-19 `biahflow/portal` virou `biahflow/cockpit` (ADR 0030 de lá): o
     redirect do GitHub cobre clone e push, mas a claim do token OIDC carrega o
     nome novo — a lista acompanha.
+    Em 2026-08-24 `biahflow/cockpit` virou `biahflow/pulse`: o deploy-hml do
+    Pulse passou a falhar em `google-github-actions/auth` com
+    `unauthorized_client` / attribute condition, exatamente este modo.
   EOT
   type        = list(string)
   default = [
     "biahflow/portal-cliente",
-    "biahflow/cockpit",
+    "biahflow/pulse",
     "biahflow/site",
     "dcamppos83/OikOS",
     "biahflow/eliseu",
@@ -55,7 +58,7 @@ variable "deploy_sa_repos" {
   type        = list(string)
   default = [
     "biahflow/portal-cliente",
-    "biahflow/cockpit",
+    "biahflow/pulse",
     "biahflow/site",
     "dcamppos83/OikOS",
     "biahflow/eliseu",
