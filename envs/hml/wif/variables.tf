@@ -37,10 +37,16 @@ variable "repos_allowlist" {
     Em 2026-08-24 `biahflow/cockpit` virou `biahflow/pulse`: o deploy-hml do
     Pulse passou a falhar em `google-github-actions/auth` com
     `unauthorized_client` / attribute condition, exatamente este modo.
+    Em 2026-08-25 `biahflow/portal-cliente` virou `biahflow/one` (ADR 0073 de
+    lá, o produto se chama One desde a ADR 0067). Desta vez a lista mudou em PR
+    pareado com o do rename, e a ordem mora naquela ADR: o apply do state de lá
+    (`ambientes/hml`) roda antes do rename, porque a impersonação da `hml-infra`
+    só existe lá; este espelho merga logo depois, senão qualquer apply daqui com
+    a lista atrasada reverte a condição e tranca `biahflow/one` para fora.
   EOT
   type        = list(string)
   default = [
-    "biahflow/portal-cliente",
+    "biahflow/one",
     "biahflow/pulse",
     "biahflow/site",
     "dcamppos83/OikOS",
@@ -57,7 +63,7 @@ variable "deploy_sa_repos" {
   EOT
   type        = list(string)
   default = [
-    "biahflow/portal-cliente",
+    "biahflow/one",
     "biahflow/pulse",
     "biahflow/site",
     "dcamppos83/OikOS",
